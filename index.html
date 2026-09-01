@@ -3,17 +3,16 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="theme-color" content="#E31E24" />
+<meta name="theme-color" content="#3AA31C" />
 <title>Woyofal - Suivi conso</title>
 <link rel="manifest" href="manifest.json" />
-<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="icon" href="icon-192.png" type="image/png" />
 <style>
   :root {
     --navy: #1B3A52;
-    --orange: #F5811F;
-    --brand-red: #E31E24;
-    --brand-purple: #6B2FA0;
-    --brand-gradient: linear-gradient(135deg, var(--brand-red), var(--orange) 55%, var(--brand-purple));
+    --orange: #FAAC03;
+    --brand-green: #3AA31C;
+    --brand-gradient: linear-gradient(135deg, var(--orange), var(--brand-green));
     --bg: #F7F6F2;
     --surface: #FFFFFF;
     --border: #E3E0D8;
@@ -46,19 +45,15 @@
   .bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; display: none; background: var(--surface); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); max-width: 640px; margin: 0 auto; }
   .nav-btn { flex: 1; border: none; background: none; padding: 9px 0 8px; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--text-muted); font-size: 11px; }
   .nav-btn svg { width: 22px; height: 22px; stroke: var(--text-muted); }
-  .nav-btn.active { color: var(--brand-red); font-weight: 600; }
-  .nav-btn.active svg { stroke: var(--brand-red); }
+  .nav-btn.active { color: var(--brand-green); font-weight: 600; }
+  .nav-btn.active svg { stroke: var(--brand-green); }
 </style>
 </head>
 <body>
 
 <div id="login-screen" class="screen">
   <div class="card" style="max-width:360px;width:100%;text-align:center;">
-    <svg width="56" height="56" viewBox="0 0 100 100" style="margin:0 auto 16px;display:block;">
-      <defs><linearGradient id="gLogin" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E31E24"></stop><stop offset="55%" stop-color="#F5811F"></stop><stop offset="100%" stop-color="#6B2FA0"></stop></linearGradient></defs>
-      <rect x="4" y="4" width="92" height="92" rx="22" fill="url(#gLogin)"></rect>
-      <path d="M56 18 L34 56 L47 56 L42 88 L74 44 L58 44 Z" fill="#fff"></path>
-    </svg>
+    <img src="icon-192.png" width="56" height="56" style="margin:0 auto 16px;border-radius:12px;display:block;" alt="Woyofal" />
     <h1 style="font-size:20px;font-weight:600;margin:0 0 6px;">Woyofal - Suivi conso</h1>
     <p style="font-size:14px;color:var(--text-secondary);margin:0 0 20px;">Connecte-toi pour suivre tes achats et ta consommation.</p>
     <button class="primary" style="width:100%;" id="login-btn">Se connecter avec Google</button>
@@ -68,11 +63,7 @@
 <div id="main-screen" class="screen container">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
     <div style="display:flex;align-items:center;gap:9px;">
-      <svg width="26" height="26" viewBox="0 0 100 100" style="display:block;flex-shrink:0;">
-        <defs><linearGradient id="gHeader" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E31E24"></stop><stop offset="55%" stop-color="#F5811F"></stop><stop offset="100%" stop-color="#6B2FA0"></stop></linearGradient></defs>
-        <rect x="4" y="4" width="92" height="92" rx="22" fill="url(#gHeader)"></rect>
-        <path d="M56 18 L34 56 L47 56 L42 88 L74 44 L58 44 Z" fill="#fff"></path>
-      </svg>
+      <img src="icon-192.png" width="26" height="26" style="border-radius:6px;display:block;flex-shrink:0;" alt="Woyofal" />
       <span style="font-weight:600;font-size:16px;">Woyofal</span>
     </div>
     <button id="logout-btn" class="icon-btn" aria-label="Deconnexion" title="Deconnexion">
