@@ -41,10 +41,13 @@
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
   .row { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; font-size: 14px; border-bottom: 1px solid var(--border); }
   .row:last-child { border-bottom: none; }
-  .tabs { display: flex; gap: 6px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
-  .tab-btn { border: none; background: none; padding: 10px 4px; margin-right: 16px; font-size: 14px; color: var(--text-secondary); border-bottom: 2px solid transparent; border-radius: 0; }
-  .tab-btn.active { font-weight: 600; color: var(--navy); border-bottom: 2px solid var(--orange); }
-  .container { max-width: 640px; margin: 0 auto; padding: 20px 16px 60px; }
+  .container { max-width: 640px; margin: 0 auto; padding: 20px 16px calc(76px + env(safe-area-inset-bottom)); }
+  .icon-btn { border: none; background: none; padding: 6px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
+  .bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; display: none; background: var(--surface); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); max-width: 640px; margin: 0 auto; }
+  .nav-btn { flex: 1; border: none; background: none; padding: 9px 0 8px; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--text-muted); font-size: 11px; }
+  .nav-btn svg { width: 22px; height: 22px; stroke: var(--text-muted); }
+  .nav-btn.active { color: var(--brand-red); font-weight: 600; }
+  .nav-btn.active svg { stroke: var(--brand-red); }
 </style>
 </head>
 <body>
@@ -52,12 +55,9 @@
 <div id="login-screen" class="screen">
   <div class="card" style="max-width:360px;width:100%;text-align:center;">
     <svg width="56" height="56" viewBox="0 0 100 100" style="margin:0 auto 16px;display:block;">
-      <g transform="rotate(-90 50 50)">
-        <circle cx="50" cy="50" r="40" fill="none" stroke="#E31E24" stroke-width="11" stroke-dasharray="75 176" stroke-dashoffset="0" stroke-linecap="round"></circle>
-        <circle cx="50" cy="50" r="40" fill="none" stroke="#F5811F" stroke-width="11" stroke-dasharray="75 176" stroke-dashoffset="-83.7" stroke-linecap="round"></circle>
-        <circle cx="50" cy="50" r="40" fill="none" stroke="#6B2FA0" stroke-width="11" stroke-dasharray="75 176" stroke-dashoffset="-167.4" stroke-linecap="round"></circle>
-      </g>
-      <path d="M54 34 L40 58 L48 58 L46 78 L64 52 L54 52 Z" fill="#1B3A52"></path>
+      <defs><linearGradient id="gLogin" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E31E24"></stop><stop offset="55%" stop-color="#F5811F"></stop><stop offset="100%" stop-color="#6B2FA0"></stop></linearGradient></defs>
+      <rect x="4" y="4" width="92" height="92" rx="22" fill="url(#gLogin)"></rect>
+      <path d="M56 18 L34 56 L47 56 L42 88 L74 44 L58 44 Z" fill="#fff"></path>
     </svg>
     <h1 style="font-size:20px;font-weight:600;margin:0 0 6px;">Woyofal - Suivi conso</h1>
     <p style="font-size:14px;color:var(--text-secondary);margin:0 0 20px;">Connecte-toi pour suivre tes achats et ta consommation.</p>
@@ -67,28 +67,36 @@
 
 <div id="main-screen" class="screen container">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-    <div style="display:flex;align-items:center;gap:10px;">
-      <svg width="32" height="32" viewBox="0 0 100 100" style="display:block;flex-shrink:0;">
-        <g transform="rotate(-90 50 50)">
-          <circle cx="50" cy="50" r="40" fill="none" stroke="#E31E24" stroke-width="14" stroke-dasharray="75 176" stroke-dashoffset="0" stroke-linecap="round"></circle>
-          <circle cx="50" cy="50" r="40" fill="none" stroke="#F5811F" stroke-width="14" stroke-dasharray="75 176" stroke-dashoffset="-83.7" stroke-linecap="round"></circle>
-          <circle cx="50" cy="50" r="40" fill="none" stroke="#6B2FA0" stroke-width="14" stroke-dasharray="75 176" stroke-dashoffset="-167.4" stroke-linecap="round"></circle>
-        </g>
-        <path d="M56 30 L38 60 L47 60 L44 82 L66 50 L55 50 Z" fill="#1B3A52"></path>
+    <div style="display:flex;align-items:center;gap:9px;">
+      <svg width="26" height="26" viewBox="0 0 100 100" style="display:block;flex-shrink:0;">
+        <defs><linearGradient id="gHeader" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#E31E24"></stop><stop offset="55%" stop-color="#F5811F"></stop><stop offset="100%" stop-color="#6B2FA0"></stop></linearGradient></defs>
+        <rect x="4" y="4" width="92" height="92" rx="22" fill="url(#gHeader)"></rect>
+        <path d="M56 18 L34 56 L47 56 L42 88 L74 44 L58 44 Z" fill="#fff"></path>
       </svg>
       <span style="font-weight:600;font-size:16px;">Woyofal</span>
     </div>
-    <button id="logout-btn" style="font-size:13px;padding:6px 10px;">Deconnexion</button>
-  </div>
-
-  <div class="tabs">
-    <button class="tab-btn active" data-tab="dashboard">Tableau de bord</button>
-    <button class="tab-btn" data-tab="achats">Achats</button>
-    <button class="tab-btn" data-tab="releves">Releves</button>
+    <button id="logout-btn" class="icon-btn" aria-label="Deconnexion" title="Deconnexion">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><path d="M16 17l5-5-5-5"></path><path d="M21 12H9"></path></svg>
+    </button>
   </div>
 
   <div id="tab-content"></div>
 </div>
+
+<nav class="bottom-nav" id="bottom-nav">
+  <button class="nav-btn active" data-tab="dashboard">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
+    Tableau
+  </button>
+  <button class="nav-btn" data-tab="achats">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h12l-1 13H7L6 7z"></path><path d="M9 7V5a3 3 0 0 1 6 0v2"></path></svg>
+    Achats
+  </button>
+  <button class="nav-btn" data-tab="releves">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"></rect><path d="M9 4V2h6v2"></path><path d="M8 10h8M8 14h8M8 18h5"></path></svg>
+    Releves
+  </button>
+</nav>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -285,15 +293,16 @@ let unsubReleves = null;
 
 const loginScreen = document.getElementById("login-screen");
 const mainScreen = document.getElementById("main-screen");
+const bottomNav = document.getElementById("bottom-nav");
 const tabContent = document.getElementById("tab-content");
 
 document.getElementById("login-btn").addEventListener("click", () => signInWithPopup(auth, googleProvider));
 document.getElementById("logout-btn").addEventListener("click", () => signOut(auth));
 
-document.querySelectorAll(".tab-btn").forEach((btn) => {
+document.querySelectorAll(".nav-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     currentTab = btn.dataset.tab;
-    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b === btn));
+    document.querySelectorAll(".nav-btn").forEach((b) => b.classList.toggle("active", b === btn));
     render();
   });
 });
@@ -303,10 +312,12 @@ onAuthStateChanged(auth, (user) => {
   if (user) {
     loginScreen.classList.remove("visible");
     mainScreen.classList.add("visible");
+    bottomNav.style.display = "flex";
     listenAchats(user.uid);
     listenReleves(user.uid);
   } else {
     mainScreen.classList.remove("visible");
+    bottomNav.style.display = "none";
     loginScreen.classList.add("visible");
     if (unsubAchats) unsubAchats();
     if (unsubReleves) unsubReleves();
