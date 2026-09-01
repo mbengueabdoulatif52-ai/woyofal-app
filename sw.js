@@ -1,4 +1,4 @@
-const CACHE_NAME = "woyofal-v1";
+const CACHE_NAME = "woyofal-v2";
 const CORE_ASSETS = ["./", "./index.html", "./manifest.json", "./icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -15,8 +15,18 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// Reseau en priorite : on va toujours chercher la derniere version en ligne,
+// et on ne se rabat sur le cache que si le reseau echoue (mode hors-ligne).
+// C'est l'inverse de "cache en priorite", qui coincait sur la toute
+// premiere version installee et ne se mettait jamais a jour tout seul.
 self.addEventListener("fetch", (event) => {
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(event.request)
+      .then((response) => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
