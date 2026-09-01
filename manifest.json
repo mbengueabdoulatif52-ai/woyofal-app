@@ -1,0 +1,12 @@
+{
+  "name": "Woyofal - Suivi conso",
+  "short_name": "Woyofal",
+  "description": "Suivi de consommation et strategie d'achat de credit Woyofal",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#F7F6F2",
+  "theme_color": "#1B3A52",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

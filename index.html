@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#1B3A52" />
+<title>Woyofal - Suivi conso</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<style>
+  :root {
+    --navy: #1B3A52;
+    --orange: #E8761A;
+    --bg: #F7F6F2;
+    --surface: #FFFFFF;
+    --border: #E3E0D8;
+    --text-primary: #22282D;
+    --text-secondary: #5B6570;
+    --text-muted: #8A9199;
+    --success-bg: #E1F0E6;
+    --success-text: #1E6B3C;
+    --warning-bg: #FBEBD6;
+    --warning-text: #8A550B;
+    --danger-bg: #FBE4E1;
+    --danger-text: #9B2C1F;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text-primary); }
+  button { font-family: inherit; cursor: pointer; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); padding: 10px 16px; font-size: 14px; }
+  button.primary { background: var(--navy); color: #fff; border: none; }
+  button.accent { background: var(--orange); color: #fff; border: none; }
+  input, select { font-family: inherit; font-size: 14px; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border); background: #fff; width: 100%; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .label { font-size: 12.5px; color: var(--text-secondary); margin: 0 0 6px; }
+  .screen { display: none; }
+  .screen.visible { display: block; }
+  #login-screen.visible { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; font-size: 14px; border-bottom: 1px solid var(--border); }
+  .row:last-child { border-bottom: none; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+  .tab-btn { border: none; background: none; padding: 10px 4px; margin-right: 16px; font-size: 14px; color: var(--text-secondary); border-bottom: 2px solid transparent; border-radius: 0; }
+  .tab-btn.active { font-weight: 600; color: var(--navy); border-bottom: 2px solid var(--orange); }
+  .container { max-width: 640px; margin: 0 auto; padding: 20px 16px 60px; }
+</style>
+</head>
+<body>
+
+<div id="login-screen" class="screen">
+  <div class="card" style="max-width:360px;width:100%;text-align:center;">
+    <div style="width:56px;height:56px;border-radius:14px;background:var(--navy);color:var(--orange);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;margin:0 auto 16px;">W</div>
+    <h1 style="font-size:20px;font-weight:600;margin:0 0 6px;">Woyofal - Suivi conso</h1>
+    <p style="font-size:14px;color:var(--text-secondary);margin:0 0 20px;">Connecte-toi pour suivre tes achats et ta consommation.</p>
+    <button class="primary" style="width:100%;" id="login-btn">Se connecter avec Google</button>
+  </div>
+</div>
+
+<div id="main-screen" class="screen container">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:32px;height:32px;border-radius:8px;background:var(--navy);color:var(--orange);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;">W</div>
+      <span style="font-weight:600;font-size:16px;">Woyofal</span>
+    </div>
+    <button id="logout-btn" style="font-size:13px;padding:6px 10px;">Deconnexion</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="dashboard">Tableau de bord</button>
+    <button class="tab-btn" data-tab="achats">Achats</button>
+    <button class="tab-btn" data-tab="releves">Releves</button>
+  </div>
+
+  <div id="tab-content"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getFirestore, collection, addDoc, deleteDoc, doc, query, orderBy, onSnapshot, Timestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ---------------------------------------------------------------
+// 1. CONFIG FIREBASE - remplace ces valeurs par celles de TON projet
+// (Console Firebase > Parametres du projet > Tes applications > Web app)
+// ---------------------------------------------------------------
+const firebaseConfig = {
+  apiKey: "AIzaSyDu8AbE4QOtkkfdDqpXs0F66NdB-n_Fz5M",
+  authDomain: "woyofal-app.firebaseapp.com",
+  projectId: "woyofal-app",
+  storageBucket: "woyofal-app.firebasestorage.app",
+  messagingSenderId: "52682466974",
+  appId: "1:52682466974:web:37c1c3bd8384424657fd8f",
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const googleProvider = new GoogleAuthProvider();
+const db = getFirestore(app);
+
+// ---------------------------------------------------------------
+// 2. MOTEUR TARIFAIRE WOYOFAL
+// A valider avec un vrai recu avant de faire confiance aux chiffres.
+// ---------------------------------------------------------------
+const DEFAULT_TARIFS = {
+  redevanceMensuelle: 1155,
+  taxeCommunale: 0.025,
+  tva: 0.18,
+  tranches: [
+    { max: 150, prix: 82 },
+    { max: 250, prix: 136.49 },
+    { max: null, prix: 159.36, tvaApplicable: true },
+  ],
+};
+
+function calculerKwh(montantFcfa, cumulDejaAchete, isPremierAchatDuMois, tarifs) {
+  tarifs = tarifs || DEFAULT_TARIFS;
+  let solde = montantFcfa;
+  if (isPremierAchatDuMois) solde -= tarifs.redevanceMensuelle;
+  if (solde <= 0) return { kwh: 0, erreur: "montant_insuffisant" };
+  solde = solde * (1 - tarifs.taxeCommunale);
+
+  let kwh = 0, remaining = solde, cum = cumulDejaAchete, guard = 0;
+  for (const tranche of tarifs.tranches) {
+    if (remaining <= 0.001 || guard++ > 20) break;
+    const plafond = tranche.max === null ? Infinity : tranche.max;
+    if (cum >= plafond) continue;
+    const capacite = plafond - cum;
+    const prixUnitaire = tranche.tvaApplicable ? tranche.prix * (1 + tarifs.tva) : tranche.prix;
+    const coutCapacite = capacite === Infinity ? Infinity : capacite * prixUnitaire;
+    if (coutCapacite !== Infinity && remaining >= coutCapacite) {
+      kwh += capacite; cum += capacite; remaining -= coutCapacite;
+    } else {
+      const ajout = remaining / prixUnitaire;
+      kwh += ajout; cum += ajout; remaining = 0;
+    }
+  }
+  return { kwh: Math.round(kwh * 100) / 100, cumulApres: Math.round(cum * 100) / 100, erreur: null };
+}
+
+function palierActuel(cumulKwh, tarifs) {
+  tarifs = tarifs || DEFAULT_TARIFS;
+  for (let i = 0; i < tarifs.tranches.length; i++) {
+    const plafond = tarifs.tranches[i].max;
+    if (plafond === null || cumulKwh < plafond) return i + 1;
+  }
+  return tarifs.tranches.length;
+}
+
+function kwhRestantAvantProchainPalier(cumulKwh, tarifs) {
+  tarifs = tarifs || DEFAULT_TARIFS;
+  const palier = palierActuel(cumulKwh, tarifs);
+  const tranche = tarifs.tranches[palier - 1];
+  if (tranche.max === null) return null;
+  return Math.max(0, tranche.max - cumulKwh);
+}
+
+function toDate(d) {
+  if (!d) return new Date(0);
+  if (typeof d.toDate === "function") return d.toDate();
+  return new Date(d);
+}
+
+function debutMois() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1);
+}
+
+function cumulMoisEnCours(achats) {
+  const debut = debutMois();
+  return achats.reduce((sum, a) => (toDate(a.date) >= debut ? sum + (a.kwh || 0) : sum), 0);
+}
+
+function estPremierAchatDuMois(achats) {
+  const debut = debutMois();
+  return !achats.some((a) => toDate(a.date) >= debut);
+}
+
+// ---------------------------------------------------------------
+// 3. ETAT DE L'APPLICATION
+// ---------------------------------------------------------------
+let currentUser = null;
+let currentTab = "dashboard";
+let achats = [];
+let releves = [];
+let unsubAchats = null;
+let unsubReleves = null;
+
+const loginScreen = document.getElementById("login-screen");
+const mainScreen = document.getElementById("main-screen");
+const tabContent = document.getElementById("tab-content");
+
+document.getElementById("login-btn").addEventListener("click", () => signInWithPopup(auth, googleProvider));
+document.getElementById("logout-btn").addEventListener("click", () => signOut(auth));
+
+document.querySelectorAll(".tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    currentTab = btn.dataset.tab;
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b === btn));
+    render();
+  });
+});
+
+onAuthStateChanged(auth, (user) => {
+  currentUser = user;
+  if (user) {
+    loginScreen.classList.remove("visible");
+    mainScreen.classList.add("visible");
+    listenAchats(user.uid);
+    listenReleves(user.uid);
+  } else {
+    mainScreen.classList.remove("visible");
+    loginScreen.classList.add("visible");
+    if (unsubAchats) unsubAchats();
+    if (unsubReleves) unsubReleves();
+    achats = []; releves = [];
+  }
+});
+
+function listenAchats(uid) {
+  const q = query(collection(db, "users", uid, "achats"), orderBy("date", "desc"));
+  unsubAchats = onSnapshot(q, (snap) => {
+    achats = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    render();
+  });
+}
+
+function listenReleves(uid) {
+  const q = query(collection(db, "users", uid, "releves"), orderBy("date", "desc"));
+  unsubReleves = onSnapshot(q, (snap) => {
+    releves = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    render();
+  });
+}
+
+async function ajouterAchat({ montant, kwh, modePaiement, date }) {
+  await addDoc(collection(db, "users", currentUser.uid, "achats"), {
+    montant, kwh, modePaiement, date: Timestamp.fromDate(new Date(date)), createdAt: Timestamp.now(),
+  });
+}
+async function supprimerAchat(id) {
+  await deleteDoc(doc(db, "users", currentUser.uid, "achats", id));
+}
+async function ajouterReleve({ soldeKwh, date }) {
+  await addDoc(collection(db, "users", currentUser.uid, "releves"), {
+    soldeKwh, date: Timestamp.fromDate(new Date(date)), createdAt: Timestamp.now(),
+  });
+}
+async function supprimerReleve(id) {
+  await deleteDoc(doc(db, "users", currentUser.uid, "releves", id));
+}
+
+function fmtDate(d) {
+  return toDate(d).toLocaleDateString("fr-FR");
+}
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// ---------------------------------------------------------------
+// 4. RENDU DES ONGLETS
+// ---------------------------------------------------------------
+function render() {
+  if (currentTab === "dashboard") renderDashboard();
+  else if (currentTab === "achats") renderAchats();
+  else renderReleves();
+}
+
+const PALIER_STYLE = {
+  1: { bg: "var(--success-bg)", text: "var(--success-text)", label: "Tranche 1" },
+  2: { bg: "var(--warning-bg)", text: "var(--warning-text)", label: "Tranche 2" },
+  3: { bg: "var(--danger-bg)", text: "var(--danger-text)", label: "Tranche 3" },
+};
+
+function renderDashboard() {
+  const cumul = cumulMoisEnCours(achats);
+  const palier = palierActuel(cumul);
+  const restant = kwhRestantAvantProchainPalier(cumul);
+  const dernierReleve = releves[0];
+  const debut = debutMois();
+  const achatsDuMois = achats.filter((a) => toDate(a.date) >= debut);
+  const totalMontant = achatsDuMois.reduce((s, a) => s + (a.montant || 0), 0);
+  const totalKwh = achatsDuMois.reduce((s, a) => s + (a.kwh || 0), 0);
+  const coutMoyen = totalKwh > 0 ? (totalMontant / totalKwh).toFixed(0) : null;
+
+  const t1max = DEFAULT_TARIFS.tranches[0].max;
+  const t2max = DEFAULT_TARIFS.tranches[1].max;
+  const jaugeMax = t2max + 60;
+  const markerPct = Math.min(100, (cumul / jaugeMax) * 100);
+  const style = PALIER_STYLE[palier];
+
+  tabContent.innerHTML = `
+    <div class="grid" style="margin-bottom:20px;">
+      <div class="card"><p class="label">kWh achetes ce mois</p><p style="font-size:22px;font-weight:600;margin:0;">${cumul.toFixed(1)} <span style="font-size:13px;color:var(--text-secondary);font-weight:400;">/ ${t1max}</span></p></div>
+      <div class="card"><p class="label">Palier actuel</p><span style="display:inline-block;background:${style.bg};color:${style.text};font-size:13px;font-weight:600;padding:4px 10px;border-radius:8px;">${style.label}</span></div>
+      <div class="card"><p class="label">Cout moyen / kWh</p><p style="font-size:22px;font-weight:600;margin:0;">${coutMoyen ? coutMoyen + " F" : "-"}</p></div>
+      <div class="card"><p class="label">Solde compteur</p><p style="font-size:22px;font-weight:600;margin:0;">${dernierReleve ? dernierReleve.soldeKwh + " kWh" : "-"}</p></div>
+    </div>
+
+    <div style="margin-bottom:20px;">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:4px;">
+        <span>0</span><span>${t1max} (T1)</span><span>${t2max} (T2)</span><span>T3</span>
+      </div>
+      <div style="position:relative;height:14px;border-radius:7px;overflow:hidden;display:flex;">
+        <div style="width:${(t1max / jaugeMax) * 100}%;background:#1E6B3C;"></div>
+        <div style="width:${((t2max - t1max) / jaugeMax) * 100}%;background:#C9820F;"></div>
+        <div style="width:${((jaugeMax - t2max) / jaugeMax) * 100}%;background:#B23A2A;"></div>
+        <div style="position:absolute;top:-3px;left:${markerPct}%;width:2px;height:20px;background:var(--text-primary);"></div>
+      </div>
+    </div>
+
+    ${restant !== null ? `<div style="background:${style.bg};color:${style.text};border-radius:10px;padding:14px;margin-bottom:20px;font-size:14px;line-height:1.5;">Il te reste <strong>${restant.toFixed(1)} kWh</strong> avant le palier suivant ce mois-ci.</div>` : ""}
+
+    <div class="card">
+      <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Simulateur d'achat</p>
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+        <input type="number" id="sim-montant" placeholder="Montant en FCFA" style="flex:1;min-width:140px;" />
+        <button class="accent" id="sim-btn">Simuler</button>
+      </div>
+      <p style="font-size:12.5px;color:var(--text-muted);margin:0 0 8px;">${estPremierAchatDuMois(achats) ? "Ce serait ton 1er achat du mois (redevance appliquee)." : "Redevance deja payee ce mois-ci."}</p>
+      <div id="sim-result"></div>
+    </div>
+  `;
+
+  document.getElementById("sim-btn").addEventListener("click", () => {
+    const val = parseFloat(document.getElementById("sim-montant").value);
+    const resultEl = document.getElementById("sim-result");
+    if (!val || val <= 0) {
+      resultEl.innerHTML = `<p style="font-size:13px;color:var(--danger-text);margin:0;">Entre un montant valide.</p>`;
+      return;
+    }
+    const res = calculerKwh(val, cumul, estPremierAchatDuMois(achats));
+    if (res.erreur === "montant_insuffisant") {
+      resultEl.innerHTML = `<p style="font-size:14px;margin:0;">Montant insuffisant pour couvrir la redevance mensuelle.</p>`;
+    } else {
+      resultEl.innerHTML = `<p style="font-size:14px;color:var(--text-secondary);margin:0;">Estimation: <strong style="color:var(--text-primary);">${res.kwh} kWh</strong> credites (cumul apres achat: ${res.cumulApres} kWh).</p>`;
+    }
+  });
+}
+
+function renderAchats() {
+  const cumul = cumulMoisEnCours(achats);
+  const premierAchat = estPremierAchatDuMois(achats);
+
+  tabContent.innerHTML = `
+    <form id="achat-form" class="card" style="margin-bottom:20px;">
+      <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Ajouter un achat</p>
+      <div class="grid" style="margin-bottom:10px;">
+        <div><p class="label">Montant (FCFA)</p><input type="number" id="a-montant" /></div>
+        <div><p class="label">Date</p><input type="date" id="a-date" value="${todayStr()}" /></div>
+        <div><p class="label">Mode de paiement</p>
+          <select id="a-mode">
+            <option value="mobile">Mobile money</option>
+            <option value="carte">Carte</option>
+            <option value="especes">Especes (+1%)</option>
+          </select>
+        </div>
+        <div><p class="label">kWh recus (SMS Woyofal)</p><input type="number" id="a-kwh" /></div>
+      </div>
+      <p style="font-size:12.5px;color:var(--text-muted);margin:0 0 10px;">Le champ kWh se pre-remplit en quittant le champ montant - corrige-le avec le chiffre reel recu par SMS.</p>
+      <p id="a-error" style="font-size:13px;color:var(--danger-text);margin:0 0 10px;display:none;"></p>
+      <button type="submit" class="primary">Enregistrer</button>
+    </form>
+    <p style="font-size:14px;font-weight:600;margin:0 0 8px;">Historique des achats</p>
+    ${achats.length === 0
+      ? `<p style="color:var(--text-secondary);font-size:14px;">Aucun achat enregistre pour le moment.</p>`
+      : `<div class="card" style="padding:0;">${achats.map((a) => `
+          <div class="row">
+            <span style="color:var(--text-secondary);">${fmtDate(a.date)}</span>
+            <span>${a.montant.toLocaleString("fr-FR")} F</span>
+            <span>${a.kwh} kWh</span>
+            <button data-del-achat="${a.id}" style="padding:4px 8px;font-size:12px;">Suppr.</button>
+          </div>`).join("")}</div>`
+    }
+  `;
+
+  document.getElementById("a-montant").addEventListener("blur", () => {
+    const val = parseFloat(document.getElementById("a-montant").value);
+    if (!val || val <= 0) return;
+    const res = calculerKwh(val, cumul, premierAchat);
+    if (!res.erreur) document.getElementById("a-kwh").value = res.kwh;
+  });
+
+  document.getElementById("achat-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const montant = parseFloat(document.getElementById("a-montant").value);
+    const kwh = parseFloat(document.getElementById("a-kwh").value);
+    const date = document.getElementById("a-date").value;
+    const modePaiement = document.getElementById("a-mode").value;
+    const errorEl = document.getElementById("a-error");
+    if (!montant || montant <= 0) { errorEl.style.display = "block"; errorEl.textContent = "Entre un montant valide."; return; }
+    if (!kwh || kwh <= 0) { errorEl.style.display = "block"; errorEl.textContent = "Entre le nombre de kWh recus."; return; }
+    errorEl.style.display = "none";
+    await ajouterAchat({ montant, kwh, modePaiement, date });
+  });
+
+  tabContent.querySelectorAll("[data-del-achat]").forEach((btn) => {
+    btn.addEventListener("click", () => supprimerAchat(btn.dataset.delAchat));
+  });
+}
+
+function renderReleves() {
+  tabContent.innerHTML = `
+    <form id="releve-form" class="card" style="margin-bottom:20px;">
+      <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Ajouter un releve</p>
+      <div class="grid" style="margin-bottom:10px;">
+        <div><p class="label">Solde kWh restant (ecran du compteur)</p><input type="number" id="r-solde" /></div>
+        <div><p class="label">Date</p><input type="date" id="r-date" value="${todayStr()}" /></div>
+      </div>
+      <p id="r-error" style="font-size:13px;color:var(--danger-text);margin:0 0 10px;display:none;"></p>
+      <button type="submit" class="primary">Enregistrer</button>
+    </form>
+    <p style="font-size:14px;font-weight:600;margin:0 0 8px;">Historique des releves</p>
+    ${releves.length === 0
+      ? `<p style="color:var(--text-secondary);font-size:14px;">Aucun releve enregistre pour le moment.</p>`
+      : `<div class="card" style="padding:0;">${releves.map((r) => `
+          <div class="row">
+            <span style="color:var(--text-secondary);">${fmtDate(r.date)}</span>
+            <span>${r.soldeKwh} kWh</span>
+            <button data-del-releve="${r.id}" style="padding:4px 8px;font-size:12px;">Suppr.</button>
+          </div>`).join("")}</div>`
+    }
+  `;
+
+  document.getElementById("releve-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const soldeKwh = parseFloat(document.getElementById("r-solde").value);
+    const date = document.getElementById("r-date").value;
+    const errorEl = document.getElementById("r-error");
+    if (isNaN(soldeKwh) || soldeKwh < 0) { errorEl.style.display = "block"; errorEl.textContent = "Entre un solde kWh valide."; return; }
+    errorEl.style.display = "none";
+    await ajouterReleve({ soldeKwh, date });
+  });
+
+  tabContent.querySelectorAll("[data-del-releve]").forEach((btn) => {
+    btn.addEventListener("click", () => supprimerReleve(btn.dataset.delReleve));
+  });
+}
+
+// PWA service worker
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+Woyofal - Suivi conso
+=====================
+
+C'est le meme principe que FII'NAS et mbengue-caisse : un fichier index.html
+tout seul (HTML + CSS + JS), Firebase charge depuis internet (pas d'installation,
+pas de npm, pas de terminal). Tu ouvres index.html, tu remplis la config, tu
+mets les fichiers sur GitHub, tu connectes a Vercel. C'est tout.
+
+ETAPES
+------
+1. Cree un nouveau projet Firebase (console.firebase.google.com), comme pour
+   mbengue-caisse. Active Authentication > Google. Active Firestore Database.
+
+2. Dans Parametres du projet > Tes applications > ajoute une Web app, copie les
+   6 valeurs (apiKey, authDomain, projectId, storageBucket, messagingSenderId,
+   appId).
+
+3. Ouvre index.html avec un editeur de texte (Bloc-notes, VS Code...), cherche
+   le bloc "firebaseConfig" vers la ligne 90, et remplace les 6 valeurs "TODO..."
+   par les tiennes.
+
+4. Dans Firestore > Regles, colle le contenu de firestore.rules et publie.
+
+5. Cree un nouveau repo GitHub (mbengue-abdoulatif52-ai/woyofal-app par exemple),
+   mets-y les fichiers (index.html, manifest.json, sw.js, icon.svg), connecte-le
+   a Vercel - exactement comme pour mbengue-caisse.
+
+6. Une fois deploye, ajoute le domaine Vercel (xxx.vercel.app) dans Firebase >
+   Authentication > Parametres > Domaines autorises, sinon la connexion Google
+   sera refusee.
+
+A VERIFIER
+----------
+Les chiffres du moteur tarifaire (dans le bloc "MOTEUR TARIFAIRE" de index.html)
+viennent d'une source en ligne, pas d'un document officiel Senelec. Compare le
+resultat du simulateur a un vrai recu Woyofal recent et corrige les valeurs si
+besoin - tout est regroupe dans DEFAULT_TARIFS, un seul endroit a modifier.
