@@ -396,25 +396,26 @@ function renderDashboard() {
 
   tabContent.innerHTML = `
     <div class="grid" style="margin-bottom:20px;">
-      <div class="card"><p class="label">kWh achetes ce mois</p><p style="font-size:22px;font-weight:600;margin:0;">${cumul.toFixed(1)} <span style="font-size:13px;color:var(--text-secondary);font-weight:400;">/ ${t1max}</span></p></div>
-      <div class="card"><p class="label">Palier actuel</p><span style="display:inline-block;background:${style.bg};color:${style.text};font-size:13px;font-weight:600;padding:4px 10px;border-radius:8px;">${style.label}</span></div>
+      <div class="card" style="background:${style.bg};border-color:transparent;">
+        <p class="label" style="color:${style.text};">kWh achetes ce mois</p>
+        <p style="font-size:20px;font-weight:600;margin:0 0 3px;color:${style.text};">${cumul.toFixed(1)} kWh</p>
+        <p style="font-size:11px;margin:0;color:${style.text};">${style.label}</p>
+      </div>
       <div class="card"><p class="label">Cout moyen / kWh</p><p style="font-size:22px;font-weight:600;margin:0;">${coutMoyen ? coutMoyen + " F" : "-"}</p></div>
       <div class="card"><p class="label">Solde compteur</p><p style="font-size:22px;font-weight:600;margin:0;">${dernierReleve ? dernierReleve.soldeKwh + " kWh" : "-"}</p></div>
     </div>
 
     <div style="margin-bottom:20px;">
-      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:4px;">
-        <span>0</span><span>${t1max} (T1)</span><span>${t2max} (T2)</span><span>T3</span>
+      <div style="position:relative;height:16px;border-radius:8px;background:#E9E7E0;overflow:hidden;margin-bottom:8px;">
+        <div style="position:absolute;left:0;top:0;bottom:0;width:${markerPct}%;background:${palier === 1 ? "#1E6B3C" : palier === 2 ? "#C9820F" : "#B23A2A"};border-radius:8px;"></div>
+        <div style="position:absolute;left:${(t1max / jaugeMax) * 100}%;top:0;bottom:0;width:1px;background:var(--bg);"></div>
+        <div style="position:absolute;left:${(t2max / jaugeMax) * 100}%;top:0;bottom:0;width:1px;background:var(--bg);"></div>
       </div>
-      <div style="position:relative;height:14px;border-radius:7px;overflow:hidden;display:flex;">
-        <div style="width:${(t1max / jaugeMax) * 100}%;background:#1E6B3C;"></div>
-        <div style="width:${((t2max - t1max) / jaugeMax) * 100}%;background:#C9820F;"></div>
-        <div style="width:${((jaugeMax - t2max) / jaugeMax) * 100}%;background:#B23A2A;"></div>
-        <div style="position:absolute;top:-3px;left:${markerPct}%;width:2px;height:20px;background:var(--text-primary);"></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;">
+        <span style="font-weight:600;color:${style.text};">${cumul.toFixed(1)} kWh</span>
+        <span style="color:var(--text-muted);">${restant !== null ? Math.round(restant) + " kWh avant la tranche " + (palier + 1) : style.label}</span>
       </div>
     </div>
-
-    ${restant !== null ? `<div style="background:${style.bg};color:${style.text};border-radius:10px;padding:14px;margin-bottom:20px;font-size:14px;line-height:1.5;">Il te reste <strong>${restant.toFixed(1)} kWh</strong> avant le palier suivant ce mois-ci.</div>` : ""}
 
     <div class="card" style="margin-bottom:20px;">
       <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Previsions</p>
