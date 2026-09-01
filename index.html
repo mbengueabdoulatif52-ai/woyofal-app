@@ -3,14 +3,17 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="theme-color" content="#1B3A52" />
+<meta name="theme-color" content="#E31E24" />
 <title>Woyofal - Suivi conso</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <style>
   :root {
     --navy: #1B3A52;
-    --orange: #E8761A;
+    --orange: #F5811F;
+    --brand-red: #E31E24;
+    --brand-purple: #6B2FA0;
+    --brand-gradient: linear-gradient(135deg, var(--brand-red), var(--orange) 55%, var(--brand-purple));
     --bg: #F7F6F2;
     --surface: #FFFFFF;
     --border: #E3E0D8;
@@ -28,7 +31,7 @@
   body { margin:0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text-primary); }
   button { font-family: inherit; cursor: pointer; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); padding: 10px 16px; font-size: 14px; }
   button.primary { background: var(--navy); color: #fff; border: none; }
-  button.accent { background: var(--orange); color: #fff; border: none; }
+  button.accent { background: var(--brand-gradient); color: #fff; border: none; }
   input, select { font-family: inherit; font-size: 14px; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border); background: #fff; width: 100%; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
   .label { font-size: 12.5px; color: var(--text-secondary); margin: 0 0 6px; }
@@ -48,7 +51,14 @@
 
 <div id="login-screen" class="screen">
   <div class="card" style="max-width:360px;width:100%;text-align:center;">
-    <div style="width:56px;height:56px;border-radius:14px;background:var(--navy);color:var(--orange);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;margin:0 auto 16px;">W</div>
+    <svg width="56" height="56" viewBox="0 0 100 100" style="margin:0 auto 16px;display:block;">
+      <g transform="rotate(-90 50 50)">
+        <circle cx="50" cy="50" r="40" fill="none" stroke="#E31E24" stroke-width="11" stroke-dasharray="75 176" stroke-dashoffset="0" stroke-linecap="round"></circle>
+        <circle cx="50" cy="50" r="40" fill="none" stroke="#F5811F" stroke-width="11" stroke-dasharray="75 176" stroke-dashoffset="-83.7" stroke-linecap="round"></circle>
+        <circle cx="50" cy="50" r="40" fill="none" stroke="#6B2FA0" stroke-width="11" stroke-dasharray="75 176" stroke-dashoffset="-167.4" stroke-linecap="round"></circle>
+      </g>
+      <path d="M54 34 L40 58 L48 58 L46 78 L64 52 L54 52 Z" fill="#1B3A52"></path>
+    </svg>
     <h1 style="font-size:20px;font-weight:600;margin:0 0 6px;">Woyofal - Suivi conso</h1>
     <p style="font-size:14px;color:var(--text-secondary);margin:0 0 20px;">Connecte-toi pour suivre tes achats et ta consommation.</p>
     <button class="primary" style="width:100%;" id="login-btn">Se connecter avec Google</button>
@@ -58,7 +68,14 @@
 <div id="main-screen" class="screen container">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
     <div style="display:flex;align-items:center;gap:10px;">
-      <div style="width:32px;height:32px;border-radius:8px;background:var(--navy);color:var(--orange);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;">W</div>
+      <svg width="32" height="32" viewBox="0 0 100 100" style="display:block;flex-shrink:0;">
+        <g transform="rotate(-90 50 50)">
+          <circle cx="50" cy="50" r="40" fill="none" stroke="#E31E24" stroke-width="14" stroke-dasharray="75 176" stroke-dashoffset="0" stroke-linecap="round"></circle>
+          <circle cx="50" cy="50" r="40" fill="none" stroke="#F5811F" stroke-width="14" stroke-dasharray="75 176" stroke-dashoffset="-83.7" stroke-linecap="round"></circle>
+          <circle cx="50" cy="50" r="40" fill="none" stroke="#6B2FA0" stroke-width="14" stroke-dasharray="75 176" stroke-dashoffset="-167.4" stroke-linecap="round"></circle>
+        </g>
+        <path d="M56 30 L38 60 L47 60 L44 82 L66 50 L55 50 Z" fill="#1B3A52"></path>
+      </svg>
       <span style="font-weight:600;font-size:16px;">Woyofal</span>
     </div>
     <button id="logout-btn" style="font-size:13px;padding:6px 10px;">Deconnexion</button>
