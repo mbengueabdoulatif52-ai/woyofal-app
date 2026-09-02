@@ -38,9 +38,10 @@
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
   .row { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; font-size: 14px; border-bottom: 1px solid var(--border); }
   .row:last-child { border-bottom: none; }
-  .container { max-width: 640px; margin: 0 auto; padding: 20px 16px calc(76px + env(safe-area-inset-bottom)); }
+  .container { max-width: 640px; margin: 0 auto; padding: calc(64px + env(safe-area-inset-top)) 16px calc(76px + env(safe-area-inset-bottom)); }
   .icon-btn { border: none; background: none; padding: 6px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
   .bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; display: none; background: var(--surface); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); max-width: 640px; margin: 0 auto; }
+  .top-header { position: fixed; top: 0; left: 0; right: 0; z-index: 10; display: none; justify-content: space-between; align-items: center; background: var(--bg); border-bottom: 1px solid var(--border); max-width: 640px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px 14px; }
   .nav-btn { flex: 1; border: none; background: none; padding: 9px 0 8px; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--text-muted); font-size: 11px; }
   .nav-btn svg { width: 22px; height: 22px; stroke: var(--text-muted); }
   .nav-btn.active { color: var(--orange); font-weight: 600; }
@@ -59,7 +60,7 @@
 </div>
 
 <div id="main-screen" class="screen container">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+  <div id="top-header" class="top-header">
     <div style="display:flex;align-items:center;gap:9px;">
       <img src="icon-192.png" width="26" height="26" style="border-radius:6px;display:block;flex-shrink:0;" alt="Woyofal" />
       <span style="font-weight:600;font-size:16px;">Woyofal</span>
@@ -500,6 +501,7 @@ let unsubUser = null;
 const loginScreen = document.getElementById("login-screen");
 const mainScreen = document.getElementById("main-screen");
 const bottomNav = document.getElementById("bottom-nav");
+const topHeader = document.getElementById("top-header");
 const tabContent = document.getElementById("tab-content");
 
 document.getElementById("login-btn").addEventListener("click", () => signInWithPopup(auth, googleProvider));
@@ -552,12 +554,14 @@ onAuthStateChanged(auth, (user) => {
     loginScreen.classList.remove("visible");
     mainScreen.classList.add("visible");
     bottomNav.style.display = "flex";
+    topHeader.style.display = "flex";
     listenAchats(user.uid);
     listenReleves(user.uid);
     listenUser(user.uid);
   } else {
     mainScreen.classList.remove("visible");
     bottomNav.style.display = "none";
+    topHeader.style.display = "none";
     loginScreen.classList.add("visible");
     if (unsubAchats) unsubAchats();
     if (unsubReleves) unsubReleves();
