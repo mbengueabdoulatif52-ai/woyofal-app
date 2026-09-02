@@ -622,6 +622,11 @@ function fmtDate(d) {
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
+function nowLocalDatetimeStr() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 // Les champs montant sont formates avec separateur de milliers au blur
 // (jamais pendant la frappe - trop de risques de curseur qui saute).
@@ -968,7 +973,7 @@ function renderAchats() {
       <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Ajouter un achat</p>
       <div class="grid" style="margin-bottom:10px;">
         <div><p class="label">Montant (FCFA)</p><input type="text" inputmode="decimal" id="a-montant" /></div>
-        <div><p class="label">Date</p><input type="date" id="a-date" value="${todayStr()}" /></div>
+        <div><p class="label">Date et heure</p><input type="datetime-local" id="a-date" value="${nowLocalDatetimeStr()}" /></div>
         <div><p class="label">Mode de paiement</p>
           <select id="a-mode">
             <option value="mobile">Mobile money</option>
@@ -1079,7 +1084,7 @@ function renderReleves() {
       <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Ajouter un releve</p>
       <div class="grid" style="margin-bottom:10px;">
         <div><p class="label">Solde kWh restant (ecran du compteur)</p><input type="text" inputmode="decimal" id="r-solde" /></div>
-        <div><p class="label">Date</p><input type="date" id="r-date" value="${todayStr()}" /></div>
+        <div><p class="label">Date et heure</p><input type="datetime-local" id="r-date" value="${nowLocalDatetimeStr()}" /></div>
       </div>
       <p id="r-error" style="font-size:13px;color:var(--danger-text);margin:0 0 10px;display:none;"></p>
       <button type="submit" class="primary">Enregistrer</button>
