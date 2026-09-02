@@ -31,7 +31,14 @@ ETAPES
 
 A VERIFIER
 ----------
-Les chiffres du moteur tarifaire (dans le bloc "MOTEUR TARIFAIRE" de index.html)
-viennent d'une source en ligne, pas d'un document officiel Senelec. Compare le
-resultat du simulateur a un vrai recu Woyofal recent et corrige les valeurs si
-besoin - tout est regroupe dans DEFAULT_TARIFS, un seul endroit a modifier.
+Les tranches (82,00 / 136,49 / 136,49+TVA) viennent de la grille tarifaire
+officielle Senelec (2026). La redevance mensuelle (429 FCFA) et la taxe
+communale (2,5%) sont confirmees pour la categorie Domestique Petite
+Puissance (DPP) via les visuels Woyofal officiels - pas verifiees pour les
+categories DMP/PPP/PMP, qui utilisent la meme redevance par defaut faute de
+donnee confirmee. Si tu changes de categorie dans Parametres et que le
+simulateur ne colle pas a un vrai recu, corrige la redevance de cette
+categorie dans TARIFS_PAR_CATEGORIE (bloc "MOTEUR TARIFAIRE" de index.html).
+
+La categorie tarifaire se choisit maintenant dans l'appli (icone reglages),
+plus besoin de modifier le code pour ca.

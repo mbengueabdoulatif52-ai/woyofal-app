@@ -64,12 +64,40 @@
       <img src="icon-192.png" width="26" height="26" style="border-radius:6px;display:block;flex-shrink:0;" alt="Woyofal" />
       <span style="font-weight:600;font-size:16px;">Woyofal</span>
     </div>
-    <button id="logout-btn" class="icon-btn" aria-label="Deconnexion" title="Deconnexion">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><path d="M16 17l5-5-5-5"></path><path d="M21 12H9"></path></svg>
-    </button>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <button id="settings-btn" class="icon-btn" aria-label="Parametres" title="Parametres">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      </button>
+      <button id="logout-btn" class="icon-btn" aria-label="Deconnexion" title="Deconnexion">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><path d="M16 17l5-5-5-5"></path><path d="M21 12H9"></path></svg>
+      </button>
+    </div>
   </div>
 
   <div id="tab-content"></div>
+</div>
+
+<div id="settings-modal" style="display:none;position:fixed;inset:0;background:rgba(34,40,45,0.45);z-index:50;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--surface);border-radius:12px;padding:20px;max-width:360px;width:100%;max-height:85vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <p style="font-size:15px;font-weight:600;margin:0;">Parametres</p>
+      <button id="settings-close" class="icon-btn" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"></path></svg>
+      </button>
+    </div>
+
+    <p class="label" style="text-transform:uppercase;letter-spacing:0.05em;font-size:11px;">Categorie tarifaire</p>
+    <select id="categorie-select" style="margin-bottom:10px;"></select>
+    <div style="background:var(--warning-bg);border-radius:8px;padding:10px 12px;margin-bottom:16px;">
+      <p style="font-size:12px;color:var(--warning-text);margin:0;line-height:1.5;">Pas sur de ta categorie ? Compose <strong>809</strong> sur ton compteur (Verification usage).</p>
+    </div>
+    <button id="categorie-save-btn" class="primary" style="width:100%;margin-bottom:22px;">Enregistrer</button>
+
+    <div style="height:1px;background:var(--border);margin-bottom:16px;"></div>
+
+    <p class="label" style="text-transform:uppercase;letter-spacing:0.05em;font-size:11px;margin-bottom:10px;">Codes utiles du compteur</p>
+    <div id="codes-utiles-list"></div>
+  </div>
 </div>
 
 <nav class="bottom-nav" id="bottom-nav">
@@ -93,7 +121,7 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, addDoc, deleteDoc, doc, query, orderBy, onSnapshot, Timestamp
+  getFirestore, collection, addDoc, deleteDoc, doc, query, orderBy, onSnapshot, Timestamp, setDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ---------------------------------------------------------------
@@ -115,22 +143,86 @@ const googleProvider = new GoogleAuthProvider();
 const db = getFirestore(app);
 
 // ---------------------------------------------------------------
-// 2. MOTEUR TARIFAIRE WOYOFAL
-// A valider avec un vrai recu avant de faire confiance aux chiffres.
+// 2. MOTEUR TARIFAIRE WOYOFAL (par categorie)
+// Chiffres 2026 confirmes par Senelec pour Domestique Petite Puissance
+// (grille tarifaire officielle + posts Woyofal). La redevance (429 F) n'est
+// confirmee que pour le DPP - a verifier pour les autres categories.
+// Taxe communale (2.5%) et TVA (18% au-dela de 250 kWh) sont des taxes
+// generiques, appliquees ici a toutes les categories.
 // ---------------------------------------------------------------
-const DEFAULT_TARIFS = {
-  redevanceMensuelle: 1155,
-  taxeCommunale: 0.025,
-  tva: 0.18,
-  tranches: [
-    { max: 150, prix: 82 },
-    { max: 250, prix: 136.49 },
-    { max: null, prix: 159.36, tvaApplicable: true },
-  ],
+const TARIFS_PAR_CATEGORIE = {
+  DPP: {
+    label: "Domestique Petite Puissance (DPP)",
+    redevanceMensuelle: 429,
+    taxeCommunale: 0.025,
+    tva: 0.18,
+    tranches: [
+      { max: 150, prix: 82.00 },
+      { max: 250, prix: 136.49 },
+      { max: null, prix: 136.49, tvaApplicable: true },
+    ],
+  },
+  DMP: {
+    label: "Domestique Moyenne Puissance (DMP)",
+    redevanceMensuelle: 429,
+    taxeCommunale: 0.025,
+    tva: 0.18,
+    tranches: [
+      { max: 150, prix: 111.23 },
+      { max: 250, prix: 143.54 },
+      { max: null, prix: 143.54, tvaApplicable: true },
+    ],
+  },
+  PPP: {
+    label: "Professionnel Petite Puissance (PPP)",
+    redevanceMensuelle: 429,
+    taxeCommunale: 0.025,
+    tva: 0.18,
+    tranches: [
+      { max: 150, prix: 147.43 },
+      { max: 250, prix: 189.84 },
+      { max: null, prix: 189.84, tvaApplicable: true },
+    ],
+  },
+  PMP: {
+    label: "Professionnel Moyenne Puissance (PMP)",
+    redevanceMensuelle: 429,
+    taxeCommunale: 0.025,
+    tva: 0.18,
+    tranches: [
+      { max: 150, prix: 165.01 },
+      { max: 250, prix: 191.01 },
+      { max: null, prix: 191.01, tvaApplicable: true },
+    ],
+  },
 };
 
+let categorieTarifaire = "DPP";
+
+function getTarifsActuels() {
+  return TARIFS_PAR_CATEGORIE[categorieTarifaire] || TARIFS_PAR_CATEGORIE.DPP;
+}
+
+const CODES_UTILES = [
+  { code: "800", label: "Consommation totale d'energie" },
+  { code: "801", label: "Credit restant" },
+  { code: "804", label: "Numero du compteur" },
+  { code: "808", label: "Puissance instantanee" },
+  { code: "809", label: "Verification usage" },
+  { code: "810", label: "Valeur du decouvert" },
+  { code: "811", label: "Credit d'urgence (a activer une fois a zero)" },
+  { code: "812", label: "Desactivation de l'alarme sonore" },
+  { code: "813", label: "Consommation de la journee precedente" },
+  { code: "814", label: "Consommation d'energie du mois en cours" },
+  { code: "815", label: "Date de la derniere recharge" },
+  { code: "816", label: "Heure de la derniere recharge" },
+  { code: "817", label: "Montant de la derniere recharge" },
+  { code: "820", label: "Consommation du mois precedent" },
+  { code: "830", label: "Code de la derniere recharge" },
+];
+
 function calculerKwh(montantFcfa, cumulDejaAchete, isPremierAchatDuMois, tarifs) {
-  tarifs = tarifs || DEFAULT_TARIFS;
+  tarifs = tarifs || getTarifsActuels();
   let solde = montantFcfa;
   if (isPremierAchatDuMois) solde -= tarifs.redevanceMensuelle;
   if (solde <= 0) return { kwh: 0, erreur: "montant_insuffisant" };
@@ -155,7 +247,7 @@ function calculerKwh(montantFcfa, cumulDejaAchete, isPremierAchatDuMois, tarifs)
 }
 
 function palierActuel(cumulKwh, tarifs) {
-  tarifs = tarifs || DEFAULT_TARIFS;
+  tarifs = tarifs || getTarifsActuels();
   for (let i = 0; i < tarifs.tranches.length; i++) {
     const plafond = tarifs.tranches[i].max;
     if (plafond === null || cumulKwh < plafond) return i + 1;
@@ -164,7 +256,7 @@ function palierActuel(cumulKwh, tarifs) {
 }
 
 function kwhRestantAvantProchainPalier(cumulKwh, tarifs) {
-  tarifs = tarifs || DEFAULT_TARIFS;
+  tarifs = tarifs || getTarifsActuels();
   const palier = palierActuel(cumulKwh, tarifs);
   const tranche = tarifs.tranches[palier - 1];
   if (tranche.max === null) return null;
@@ -281,6 +373,7 @@ let achats = [];
 let releves = [];
 let unsubAchats = null;
 let unsubReleves = null;
+let unsubUser = null;
 
 const loginScreen = document.getElementById("login-screen");
 const mainScreen = document.getElementById("main-screen");
@@ -289,6 +382,39 @@ const tabContent = document.getElementById("tab-content");
 
 document.getElementById("login-btn").addEventListener("click", () => signInWithPopup(auth, googleProvider));
 document.getElementById("logout-btn").addEventListener("click", () => signOut(auth));
+
+const settingsModal = document.getElementById("settings-modal");
+const categorieSelect = document.getElementById("categorie-select");
+
+Object.keys(TARIFS_PAR_CATEGORIE).forEach((code) => {
+  const opt = document.createElement("option");
+  opt.value = code;
+  opt.textContent = TARIFS_PAR_CATEGORIE[code].label;
+  categorieSelect.appendChild(opt);
+});
+
+document.getElementById("codes-utiles-list").innerHTML = CODES_UTILES.map((c) => `
+  <div class="row" style="padding:7px 0;">
+    <span style="font-weight:600;color:var(--text-primary);width:32px;flex-shrink:0;">${c.code}</span>
+    <span style="color:var(--text-secondary);font-size:12.5px;">${c.label}</span>
+  </div>
+`).join("");
+
+document.getElementById("settings-btn").addEventListener("click", () => {
+  categorieSelect.value = categorieTarifaire;
+  settingsModal.style.display = "flex";
+});
+document.getElementById("settings-close").addEventListener("click", () => {
+  settingsModal.style.display = "none";
+});
+settingsModal.addEventListener("click", (e) => {
+  if (e.target === settingsModal) settingsModal.style.display = "none";
+});
+document.getElementById("categorie-save-btn").addEventListener("click", async () => {
+  if (!currentUser) return;
+  await sauvegarderCategorie(currentUser.uid, categorieSelect.value);
+  settingsModal.style.display = "none";
+});
 
 document.querySelectorAll(".nav-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -306,13 +432,15 @@ onAuthStateChanged(auth, (user) => {
     bottomNav.style.display = "flex";
     listenAchats(user.uid);
     listenReleves(user.uid);
+    listenUser(user.uid);
   } else {
     mainScreen.classList.remove("visible");
     bottomNav.style.display = "none";
     loginScreen.classList.add("visible");
     if (unsubAchats) unsubAchats();
     if (unsubReleves) unsubReleves();
-    achats = []; releves = [];
+    if (unsubUser) unsubUser();
+    achats = []; releves = []; categorieTarifaire = "DPP";
   }
 });
 
@@ -330,6 +458,18 @@ function listenReleves(uid) {
     releves = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     render();
   });
+}
+
+function listenUser(uid) {
+  unsubUser = onSnapshot(doc(db, "users", uid), (snap) => {
+    const data = snap.data();
+    categorieTarifaire = (data && data.categorieTarifaire) || "DPP";
+    render();
+  });
+}
+
+async function sauvegarderCategorie(uid, categorie) {
+  await setDoc(doc(db, "users", uid), { categorieTarifaire: categorie }, { merge: true });
 }
 
 async function ajouterAchat({ montant, kwh, modePaiement, date }) {
@@ -427,8 +567,8 @@ function renderDashboard() {
   const dureeRecharge = dureeMoyenneRecharge(achats, taux);
   const aAnomalie = intervalles.some((i) => i.anomalie);
 
-  const t1max = DEFAULT_TARIFS.tranches[0].max;
-  const t2max = DEFAULT_TARIFS.tranches[1].max;
+  const t1max = getTarifsActuels().tranches[0].max;
+  const t2max = getTarifsActuels().tranches[1].max;
   const jaugeMax = t2max + 60;
   const markerPct = Math.min(100, (cumul / jaugeMax) * 100);
   const style = PALIER_STYLE[palier];
