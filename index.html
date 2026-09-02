@@ -83,6 +83,7 @@
   </div>
 
   <div id="alerte-solde"></div>
+  <div id="rappel-releve"></div>
   <div id="tab-content"></div>
 </div>
 
@@ -1110,12 +1111,14 @@ function formatMontantInput(input) {
 // ---------------------------------------------------------------
 function render() {
   renderAlerteSolde();
+  renderRappelReleve();
   if (currentTab === "dashboard") renderDashboard();
   else if (currentTab === "achats") renderAchats();
   else renderReleves();
 }
 
 const SEUIL_ALERTE_JOURS = 3;
+const SEUIL_JOURS_RELEVE = 3;
 
 function renderAlerteSolde() {
   const el = document.getElementById("alerte-solde");
@@ -1131,6 +1134,36 @@ function renderAlerteSolde() {
         <p style="font-size:13px;color:var(--danger-text);margin:0;line-height:1.5;"><strong>Solde presque epuise</strong> - environ ${jours} jour${jours > 1 ? "s" : ""} restant${jours > 1 ? "s" : ""} a ton rythme actuel, a sec vers le ${prevision.dateEstimee.toLocaleDateString("fr-FR")}.</p>
       </div>
     `;
+  } else {
+    el.innerHTML = "";
+  }
+}
+
+function renderRappelReleve() {
+  const el = document.getElementById("rappel-releve");
+  if (!el) return;
+  let message = null;
+  if (releves.length === 0) {
+    message = "<strong>Aucun releve enregistre</strong> - ajoutes-en un pour activer les previsions.";
+  } else {
+    const jours = Math.floor(joursEntre(releves[0].date, new Date()));
+    if (jours >= SEUIL_JOURS_RELEVE) {
+      message = `<strong>Pas de releve depuis ${jours} jour${jours > 1 ? "s" : ""}</strong> - ajoutes-en un pour garder des previsions fiables.`;
+    }
+  }
+  if (message) {
+    el.innerHTML = `
+      <div id="rappel-releve-clic" style="background:var(--warning-bg);border-radius:10px;padding:12px 14px;display:flex;gap:10px;align-items:center;cursor:pointer;margin-bottom:20px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--warning-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>
+        <p style="font-size:13px;color:var(--warning-text);margin:0;line-height:1.5;flex:1;">${message}</p>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M9 18l6-6-6-6"></path></svg>
+      </div>
+    `;
+    document.getElementById("rappel-releve-clic").addEventListener("click", () => {
+      currentTab = "releves";
+      document.querySelectorAll(".nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === "releves"));
+      render();
+    });
   } else {
     el.innerHTML = "";
   }
