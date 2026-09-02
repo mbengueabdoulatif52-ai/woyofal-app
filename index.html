@@ -616,8 +616,8 @@ async function supprimerReleve(id) {
   await deleteDoc(doc(db, "users", currentUser.uid, "releves", id));
 }
 
-function fmtDate(d) {
-  return toDate(d).toLocaleDateString("fr-FR");
+function fmtDateHeure(d) {
+  return toDate(d).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -994,7 +994,7 @@ function renderAchats() {
       ? `<p style="color:var(--text-secondary);font-size:14px;">Aucun achat enregistre pour le moment.</p>`
       : `<div class="card" style="padding:0;">${achats.map((a) => `
           <div class="row">
-            <span style="color:var(--text-secondary);">${fmtDate(a.date)}</span>
+            <span style="color:var(--text-secondary);">${fmtDateHeure(a.date)}</span>
             <span>${a.montant.toLocaleString("fr-FR")} F</span>
             <span>${a.kwh} kWh</span>
             <button data-del-achat="${a.id}" style="padding:4px 8px;font-size:12px;">Suppr.</button>
@@ -1095,7 +1095,7 @@ function renderReleves() {
       ? `<p style="color:var(--text-secondary);font-size:14px;">Aucun releve enregistre pour le moment.</p>`
       : `<div class="card" style="padding:0;">${releves.map((r) => `
           <div class="row">
-            <span style="color:var(--text-secondary);">${fmtDate(r.date)}</span>
+            <span style="color:var(--text-secondary);">${fmtDateHeure(r.date)}</span>
             <span>${r.soldeKwh} kWh</span>
             <button data-del-releve="${r.id}" style="padding:4px 8px;font-size:12px;">Suppr.</button>
           </div>`).join("")}</div>`
