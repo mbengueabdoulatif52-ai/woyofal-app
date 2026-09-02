@@ -1570,8 +1570,10 @@ function renderAchats() {
       ? { redevance: 0, taxeCommunaleMontant: 0, tvaMontant: 0 }
       : { redevance: calc.redevance, taxeCommunaleMontant: calc.taxeCommunaleMontant, tvaMontant: calc.tvaMontant };
     if (achatEnEditionId) {
-      await modifierAchat(achatEnEditionId, { montant, kwh, modePaiement, date, ...breakdown });
+      const idAModifier = achatEnEditionId;
       achatEnEditionId = null;
+      render();
+      await modifierAchat(idAModifier, { montant, kwh, modePaiement, date, ...breakdown });
     } else {
       await ajouterAchat({ montant, kwh, modePaiement, date, ...breakdown });
     }
@@ -1669,8 +1671,10 @@ function renderReleves() {
     if (isNaN(soldeKwh) || soldeKwh < 0) { errorEl.style.display = "block"; errorEl.textContent = "Entre un solde kWh valide."; return; }
     errorEl.style.display = "none";
     if (releveEnEditionId) {
-      await modifierReleve(releveEnEditionId, { soldeKwh, date });
+      const idAModifier = releveEnEditionId;
       releveEnEditionId = null;
+      render();
+      await modifierReleve(idAModifier, { soldeKwh, date });
     } else {
       await ajouterReleve({ soldeKwh, date });
     }
