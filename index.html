@@ -422,6 +422,42 @@ function planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, ta
   return { montantTotal, redevanceTotale, detail: detailFinal, erreur: null };
 }
 
+// ---------------------------------------------------------------
+// FACTEUR DE CORRECTION INTERNE (Optimiseur uniquement)
+// Compare, sur l'historique du compteur, le kWh reellement recu (SMS) au
+// kWh theorique que la formule avait estime au moment de l'achat. Le ratio
+// moyen sert a affiner silencieusement les projections de l'Optimiseur,
+// sans jamais toucher aux constantes tarifaires ni au reste de l'appli
+// (le formulaire d'achat et la detection d'ecart restent sur la formule
+// pure, volontairement, pour continuer a detecter les anomalies).
+// ---------------------------------------------------------------
+const SEUIL_ACHATS_CALIBRATION = 5;
+
+function facteurCorrection(achatsListe) {
+  const ratios = achatsListe
+    .filter((a) => a.kwhEstime && a.kwhEstime > 0 && a.kwh > 0)
+    .map((a) => a.kwh / a.kwhEstime)
+    .filter((r) => r >= 0.5 && r <= 2); // ecarte les saisies aberrantes
+  if (ratios.length < SEUIL_ACHATS_CALIBRATION) return null;
+  return ratios.reduce((s, r) => s + r, 0) / ratios.length;
+}
+
+function appliquerFacteurCorrection(resultat, facteur, mode) {
+  if (!facteur || resultat.erreur) return resultat;
+  if (mode === "budget") {
+    return {
+      ...resultat,
+      kwhTotal: Math.round(resultat.kwhTotal * facteur * 100) / 100,
+      detail: resultat.detail.map((d) => ({ ...d, kwh: Math.round(d.kwh * facteur * 100) / 100 })),
+    };
+  }
+  return {
+    ...resultat,
+    montantTotal: Math.round(resultat.montantTotal / facteur),
+    detail: resultat.detail.map((d) => ({ ...d, montant: Math.round(d.montant / facteur) })),
+  };
+}
+
 function toDate(d) {
   if (!d) return new Date(0);
   if (typeof d.toDate === "function") return d.toDate();
@@ -863,15 +899,15 @@ function listenReleves(uid, compteurId) {
   });
 }
 
-async function ajouterAchat({ montant, kwh, modePaiement, date, redevance, taxeCommunaleMontant, tvaMontant }) {
+async function ajouterAchat({ montant, kwh, kwhEstime, modePaiement, date, redevance, taxeCommunaleMontant, tvaMontant }) {
   await addDoc(collection(db, "users", currentUser.uid, "compteurs", compteurActifId, "achats"), {
-    montant, kwh, modePaiement, date: Timestamp.fromDate(new Date(date)), createdAt: Timestamp.now(),
+    montant, kwh, kwhEstime: kwhEstime || null, modePaiement, date: Timestamp.fromDate(new Date(date)), createdAt: Timestamp.now(),
     redevance: redevance || 0, taxeCommunaleMontant: taxeCommunaleMontant || 0, tvaMontant: tvaMontant || 0,
   });
 }
-async function modifierAchat(id, { montant, kwh, modePaiement, date, redevance, taxeCommunaleMontant, tvaMontant }) {
+async function modifierAchat(id, { montant, kwh, kwhEstime, modePaiement, date, redevance, taxeCommunaleMontant, tvaMontant }) {
   await updateDoc(doc(db, "users", currentUser.uid, "compteurs", compteurActifId, "achats", id), {
-    montant, kwh, modePaiement, date: Timestamp.fromDate(new Date(date)),
+    montant, kwh, kwhEstime: kwhEstime || null, modePaiement, date: Timestamp.fromDate(new Date(date)),
     redevance: redevance || 0, taxeCommunaleMontant: taxeCommunaleMontant || 0, tvaMontant: tvaMontant || 0,
   });
 }
@@ -1375,11 +1411,13 @@ function renderDashboard() {
     const rythmeInfo = calculerTauxEffectif();
     const tauxEffectif = rythmeInfo.taux;
 
-    const resultats = [1, 2, 3].map((n) =>
+    const resultatsBruts = [1, 2, 3].map((n) =>
       optMode === "budget"
         ? planifierParBudget(val, n, cumul, premier, tarifsActuels)
         : planifierParKwh(val, n, cumul, premier, tarifsActuels)
     );
+    const facteur = facteurCorrection(achats);
+    const resultats = resultatsBruts.map((r) => appliquerFacteurCorrection(r, facteur, optMode));
 
     let meilleurIndex = 0;
     resultats.forEach((r, i) => {
@@ -1569,13 +1607,14 @@ function renderAchats() {
     const breakdown = calc.erreur
       ? { redevance: 0, taxeCommunaleMontant: 0, tvaMontant: 0 }
       : { redevance: calc.redevance, taxeCommunaleMontant: calc.taxeCommunaleMontant, tvaMontant: calc.tvaMontant };
+    const kwhEstime = calc.erreur ? null : calc.kwh;
     if (achatEnEditionId) {
       const idAModifier = achatEnEditionId;
       achatEnEditionId = null;
       render();
-      await modifierAchat(idAModifier, { montant, kwh, modePaiement, date, ...breakdown });
+      await modifierAchat(idAModifier, { montant, kwh, kwhEstime, modePaiement, date, ...breakdown });
     } else {
-      await ajouterAchat({ montant, kwh, modePaiement, date, ...breakdown });
+      await ajouterAchat({ montant, kwh, kwhEstime, modePaiement, date, ...breakdown });
     }
   });
 
