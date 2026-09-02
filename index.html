@@ -531,7 +531,9 @@ const topHeader = document.getElementById("top-header");
 const tabContent = document.getElementById("tab-content");
 
 document.getElementById("login-btn").addEventListener("click", () => signInWithPopup(auth, googleProvider));
-document.getElementById("logout-btn").addEventListener("click", () => signOut(auth));
+document.getElementById("logout-btn").addEventListener("click", () => {
+  if (confirm("Se deconnecter ?")) signOut(auth);
+});
 
 const settingsModal = document.getElementById("settings-modal");
 const categorieSelect = document.getElementById("categorie-select");
