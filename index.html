@@ -223,12 +223,13 @@ const CODES_UTILES = [
 
 function calculerKwh(montantFcfa, cumulDejaAchete, isPremierAchatDuMois, tarifs) {
   tarifs = tarifs || getTarifsActuels();
-  let solde = montantFcfa;
-  if (isPremierAchatDuMois) solde -= tarifs.redevanceMensuelle;
-  if (solde <= 0) return { kwh: 0, erreur: "montant_insuffisant" };
-  solde = solde * (1 - tarifs.taxeCommunale);
+  const redevance = isPremierAchatDuMois ? tarifs.redevanceMensuelle : 0;
+  let solde = montantFcfa - redevance;
+  if (solde <= 0) return { kwh: 0, erreur: "montant_insuffisant", redevance: Math.round(redevance) };
+  const taxeCommunaleMontant = solde * tarifs.taxeCommunale;
+  solde = solde - taxeCommunaleMontant;
 
-  let kwh = 0, remaining = solde, cum = cumulDejaAchete, guard = 0;
+  let kwh = 0, remaining = solde, cum = cumulDejaAchete, guard = 0, tvaMontant = 0;
   for (const tranche of tarifs.tranches) {
     if (remaining <= 0.001 || guard++ > 20) break;
     const plafond = tranche.max === null ? Infinity : tranche.max;
@@ -236,14 +237,23 @@ function calculerKwh(montantFcfa, cumulDejaAchete, isPremierAchatDuMois, tarifs)
     const capacite = plafond - cum;
     const prixUnitaire = tranche.tvaApplicable ? tranche.prix * (1 + tarifs.tva) : tranche.prix;
     const coutCapacite = capacite === Infinity ? Infinity : capacite * prixUnitaire;
+    let ajout, coutReel;
     if (coutCapacite !== Infinity && remaining >= coutCapacite) {
-      kwh += capacite; cum += capacite; remaining -= coutCapacite;
+      ajout = capacite; coutReel = coutCapacite;
     } else {
-      const ajout = remaining / prixUnitaire;
-      kwh += ajout; cum += ajout; remaining = 0;
+      ajout = remaining / prixUnitaire; coutReel = remaining;
     }
+    if (tranche.tvaApplicable) tvaMontant += coutReel - ajout * tranche.prix;
+    kwh += ajout; cum += ajout; remaining -= coutReel;
   }
-  return { kwh: Math.round(kwh * 100) / 100, cumulApres: Math.round(cum * 100) / 100, erreur: null };
+  return {
+    kwh: Math.round(kwh * 100) / 100,
+    cumulApres: Math.round(cum * 100) / 100,
+    redevance: Math.round(redevance),
+    taxeCommunaleMontant: Math.round(taxeCommunaleMontant),
+    tvaMontant: Math.round(tvaMontant),
+    erreur: null,
+  };
 }
 
 function palierActuel(cumulKwh, tarifs) {
@@ -966,6 +976,7 @@ function renderAchats() {
         <div><p class="label">kWh recus (SMS Woyofal)</p><input type="text" inputmode="decimal" id="a-kwh" /></div>
       </div>
       <p style="font-size:12.5px;color:var(--text-muted);margin:0 0 10px;">Le champ kWh se pre-remplit en quittant le champ montant - corrige-le avec le chiffre reel recu par SMS.</p>
+      <div id="a-detail" style="margin-bottom:10px;"></div>
       <p id="a-error" style="font-size:13px;color:var(--danger-text);margin:0 0 10px;display:none;"></p>
       <button type="submit" class="primary">Enregistrer</button>
     </form>
@@ -984,10 +995,34 @@ function renderAchats() {
 
   document.getElementById("a-montant").addEventListener("blur", () => {
     const montantEl = document.getElementById("a-montant");
+    const detailEl = document.getElementById("a-detail");
     const val = parseMontant(montantEl.value);
     if (val > 0) {
       const res = calculerKwh(val, cumul, premierAchat);
-      if (!res.erreur) document.getElementById("a-kwh").value = res.kwh;
+      if (!res.erreur) {
+        document.getElementById("a-kwh").value = res.kwh;
+        const lignes = [];
+        if (res.redevance > 0) lignes.push(["Redevance (1er achat du mois)", res.redevance]);
+        if (res.taxeCommunaleMontant > 0) lignes.push(["Taxe communale (2,5%)", res.taxeCommunaleMontant]);
+        if (res.tvaMontant > 0) lignes.push(["TVA (18%, au-dela de 250 kWh)", res.tvaMontant]);
+        detailEl.innerHTML = `
+          <div style="background:var(--bg);border-radius:8px;padding:12px;">
+            ${lignes.map(([label, montant]) => `
+              <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-secondary);padding:3px 0;">
+                <span>${label}</span><span>${montant.toLocaleString("fr-FR")} F</span>
+              </div>
+            `).join("")}
+            ${lignes.length ? `<div style="height:1px;background:var(--border);margin:6px 0;"></div>` : ""}
+            <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-primary);font-weight:600;padding:3px 0;">
+              <span>Converti en energie</span><span>${res.kwh} kWh</span>
+            </div>
+          </div>
+        `;
+      } else {
+        detailEl.innerHTML = "";
+      }
+    } else {
+      detailEl.innerHTML = "";
     }
     formatMontantInput(montantEl);
   });
