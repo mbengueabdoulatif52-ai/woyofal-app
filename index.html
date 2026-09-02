@@ -464,13 +464,6 @@ function joursRestantsEtDate(releves, achats, taux) {
   return { soldeEstime: Math.max(0, soldeEstime), joursRestants, dateEstimee };
 }
 
-function dureeMoyenneRecharge(achats, taux) {
-  if (!taux || taux <= 0 || achats.length === 0) return null;
-  const totalKwh = achats.reduce((s, a) => s + (a.kwh || 0), 0);
-  const moyenneKwh = totalKwh / achats.length;
-  return moyenneKwh / taux;
-}
-
 function graphiqueConsommationSVG(intervalles) {
   if (intervalles.length < 2) {
     return `<p style="font-size:13px;color:var(--text-secondary);margin:0;">Ajoute encore un relevé pour voir l'evolution dans le temps (un seul intervalle ne donne rien a comparer).</p>`;
@@ -601,14 +594,16 @@ async function sauvegarderCategorie(uid, categorie) {
   await setDoc(doc(db, "users", uid), { categorieTarifaire: categorie }, { merge: true });
 }
 
-async function ajouterAchat({ montant, kwh, modePaiement, date }) {
+async function ajouterAchat({ montant, kwh, modePaiement, date, redevance, taxeCommunaleMontant, tvaMontant }) {
   await addDoc(collection(db, "users", currentUser.uid, "achats"), {
     montant, kwh, modePaiement, date: Timestamp.fromDate(new Date(date)), createdAt: Timestamp.now(),
+    redevance: redevance || 0, taxeCommunaleMontant: taxeCommunaleMontant || 0, tvaMontant: tvaMontant || 0,
   });
 }
-async function modifierAchat(id, { montant, kwh, modePaiement, date }) {
+async function modifierAchat(id, { montant, kwh, modePaiement, date, redevance, taxeCommunaleMontant, tvaMontant }) {
   await updateDoc(doc(db, "users", currentUser.uid, "achats", id), {
     montant, kwh, modePaiement, date: Timestamp.fromDate(new Date(date)),
+    redevance: redevance || 0, taxeCommunaleMontant: taxeCommunaleMontant || 0, tvaMontant: tvaMontant || 0,
   });
 }
 async function supprimerAchat(id) {
@@ -696,6 +691,26 @@ function statValue(value, unit, color) {
   return `<p style="margin:0;font-variant-numeric:tabular-nums;"><span style="font-size:20px;font-weight:700;color:${color};">${value}</span>${unit ? ` <span style="font-size:12px;color:var(--text-muted);">${unit}</span>` : ""}</p>`;
 }
 
+function detailAchatHtml(redevance, taxeCommunaleMontant, tvaMontant, kwh) {
+  const lignes = [];
+  if (redevance > 0) lignes.push(["Redevance (1er achat du mois)", redevance]);
+  if (taxeCommunaleMontant > 0) lignes.push(["Taxe communale (2,5%)", taxeCommunaleMontant]);
+  if (tvaMontant > 0) lignes.push(["TVA (18%, au-dela de 250 kWh)", tvaMontant]);
+  return `
+    <div style="background:var(--bg);border-radius:8px;padding:12px;">
+      ${lignes.map(([label, montant]) => `
+        <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-secondary);padding:3px 0;">
+          <span>${label}</span><span>${montant.toLocaleString("fr-FR")} F</span>
+        </div>
+      `).join("")}
+      ${lignes.length ? `<div style="height:1px;background:var(--border);margin:6px 0;"></div>` : ""}
+      <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-primary);font-weight:600;padding:3px 0;">
+        <span>Converti en energie</span><span>${kwh} kWh</span>
+      </div>
+    </div>
+  `;
+}
+
 function renderDashboard() {
   const cumul = cumulMoisEnCours(achats);
   const palier = palierActuel(cumul);
@@ -710,7 +725,6 @@ function renderDashboard() {
   const intervalles = intervallesConsommation(releves, achats);
   const taux = tauxMoyenJournalier(intervalles);
   const prevision = joursRestantsEtDate(releves, achats, taux);
-  const dureeRecharge = dureeMoyenneRecharge(achats, taux);
   const aAnomalie = intervalles.some((i) => i.anomalie);
 
   const t1max = getTarifsActuels().tranches[0].max;
@@ -758,20 +772,16 @@ function renderDashboard() {
       ${releves.length < 2
         ? `<p style="font-size:13px;color:var(--text-secondary);margin:0;">Ajoute au moins 2 releves espaces dans le temps (onglet Releves) pour activer les previsions.</p>`
         : `
-          <div style="display:grid;grid-template-columns:1fr 1fr;margin-bottom:16px;">
-            <div style="padding:0 14px 16px 0;border-right:1px solid var(--border);border-bottom:1px solid var(--border);">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;margin-bottom:16px;">
+            <div style="padding:0 12px 0 0;border-right:1px solid var(--border);">
               ${statHead("bolt", "Rythme moyen")}
               ${statValue(taux !== null ? taux.toFixed(2) : "-", taux !== null ? "kWh/j" : "")}
             </div>
-            <div style="padding:0 0 16px 14px;border-bottom:1px solid var(--border);">
+            <div style="padding:0 12px;border-right:1px solid var(--border);">
               ${statHead("clock", "Jours restants")}
               ${statValue(prevision ? Math.round(prevision.joursRestants) : "-", prevision ? "j" : "")}
             </div>
-            <div style="padding:16px 14px 0 0;border-right:1px solid var(--border);">
-              ${statHead("refresh", "Duree recharge")}
-              ${statValue(dureeRecharge !== null ? Math.round(dureeRecharge) : "-", dureeRecharge !== null ? "j" : "")}
-            </div>
-            <div style="padding:16px 0 0 14px;">
+            <div style="padding:0 0 0 12px;">
               ${statHead("calendar", "A sec le")}
               ${statValue(prevision ? prevision.dateEstimee.toLocaleDateString("fr-FR") : "-", "", prevision ? "var(--danger-text)" : undefined)}
             </div>
@@ -1025,22 +1035,33 @@ function renderAchats() {
     <p style="font-size:14px;font-weight:600;margin:0 0 8px;">Historique des achats</p>
     ${achats.length === 0
       ? `<p style="color:var(--text-secondary);font-size:14px;">Aucun achat enregistre pour le moment.</p>`
-      : `<div class="card" style="padding:0;">${achats.map((a) => `
-          <div class="row" style="align-items:center;">
-            <div>
-              <p style="font-size:10.5px;color:var(--text-muted);margin:0 0 2px;">${fmtDateHeure(a.date)}</p>
-              <p style="font-size:14px;font-weight:600;color:var(--text-primary);margin:0;">${a.montant.toLocaleString("fr-FR")} F</p>
+      : `<div class="card" style="padding:0;">${achats.map((a) => {
+          const aDetail = a.redevance !== undefined;
+          return `
+          <div class="row" style="flex-direction:column;align-items:stretch;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <p style="font-size:10.5px;color:var(--text-muted);margin:0 0 2px;">${fmtDateHeure(a.date)}</p>
+                <p style="font-size:14px;font-weight:600;color:var(--text-primary);margin:0;">${a.montant.toLocaleString("fr-FR")} F</p>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:13px;color:var(--text-secondary);">${a.kwh} kWh</span>
+                ${aDetail ? `
+                  <button data-toggle-achat="${a.id}" class="icon-btn" aria-label="Detail">
+                    <svg id="chevron-achat-${a.id}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .15s;"><path d="M6 9l6 6 6-6"></path></svg>
+                  </button>
+                ` : ""}
+                <button data-edit-achat="${a.id}" class="icon-btn" aria-label="Modifier">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"></path><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                </button>
+                <button data-del-achat="${a.id}" class="icon-btn" aria-label="Supprimer">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"></path><path d="M10 11v6M14 11v6"></path><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"></path><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"></path></svg>
+                </button>
+              </div>
             </div>
-            <div style="display:flex;align-items:center;gap:12px;">
-              <span style="font-size:13px;color:var(--text-secondary);">${a.kwh} kWh</span>
-              <button data-edit-achat="${a.id}" class="icon-btn" aria-label="Modifier">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"></path><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-              </button>
-              <button data-del-achat="${a.id}" class="icon-btn" aria-label="Supprimer">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"></path><path d="M10 11v6M14 11v6"></path><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"></path><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"></path></svg>
-              </button>
-            </div>
-          </div>`).join("")}</div>`
+            ${aDetail ? `<div id="detail-achat-${a.id}" style="display:none;margin-top:10px;">${detailAchatHtml(a.redevance, a.taxeCommunaleMontant, a.tvaMontant, a.kwh)}</div>` : ""}
+          </div>`;
+        }).join("")}</div>`
     }
   `;
 
@@ -1058,23 +1079,7 @@ function renderAchats() {
         aKwhEl.value = res.kwh;
         estimationKwh = res.kwh;
         aEcartEl.style.display = "none";
-        const lignes = [];
-        if (res.redevance > 0) lignes.push(["Redevance (1er achat du mois)", res.redevance]);
-        if (res.taxeCommunaleMontant > 0) lignes.push(["Taxe communale (2,5%)", res.taxeCommunaleMontant]);
-        if (res.tvaMontant > 0) lignes.push(["TVA (18%, au-dela de 250 kWh)", res.tvaMontant]);
-        detailEl.innerHTML = `
-          <div style="background:var(--bg);border-radius:8px;padding:12px;">
-            ${lignes.map(([label, montant]) => `
-              <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-secondary);padding:3px 0;">
-                <span>${label}</span><span>${montant.toLocaleString("fr-FR")} F</span>
-              </div>
-            `).join("")}
-            ${lignes.length ? `<div style="height:1px;background:var(--border);margin:6px 0;"></div>` : ""}
-            <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-primary);font-weight:600;padding:3px 0;">
-              <span>Converti en energie</span><span>${res.kwh} kWh</span>
-            </div>
-          </div>
-        `;
+        detailEl.innerHTML = detailAchatHtml(res.redevance, res.taxeCommunaleMontant, res.tvaMontant, res.kwh);
       } else {
         detailEl.innerHTML = "";
         estimationKwh = null;
@@ -1112,12 +1117,27 @@ function renderAchats() {
     if (!montant || montant <= 0) { errorEl.style.display = "block"; errorEl.textContent = "Entre un montant valide."; return; }
     if (!kwh || kwh <= 0) { errorEl.style.display = "block"; errorEl.textContent = "Entre le nombre de kWh recus."; return; }
     errorEl.style.display = "none";
+    const calc = calculerKwh(montant, cumul, premierAchat);
+    const breakdown = calc.erreur
+      ? { redevance: 0, taxeCommunaleMontant: 0, tvaMontant: 0 }
+      : { redevance: calc.redevance, taxeCommunaleMontant: calc.taxeCommunaleMontant, tvaMontant: calc.tvaMontant };
     if (achatEnEditionId) {
-      await modifierAchat(achatEnEditionId, { montant, kwh, modePaiement, date });
+      await modifierAchat(achatEnEditionId, { montant, kwh, modePaiement, date, ...breakdown });
       achatEnEditionId = null;
     } else {
-      await ajouterAchat({ montant, kwh, modePaiement, date });
+      await ajouterAchat({ montant, kwh, modePaiement, date, ...breakdown });
     }
+  });
+
+  tabContent.querySelectorAll("[data-toggle-achat]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.toggleAchat;
+      const detailDiv = document.getElementById(`detail-achat-${id}`);
+      const chevron = document.getElementById(`chevron-achat-${id}`);
+      const isOpen = detailDiv.style.display !== "none";
+      detailDiv.style.display = isOpen ? "none" : "block";
+      chevron.style.transform = isOpen ? "rotate(0deg)" : "rotate(180deg)";
+    });
   });
 
   if (achatEdite) {
