@@ -11,8 +11,6 @@
   :root {
     --navy: #1B3A52;
     --orange: #FAAC03;
-    --brand-green: #3AA31C;
-    --brand-gradient: linear-gradient(135deg, var(--orange), var(--brand-green));
     --bg: #F7F6F2;
     --surface: #FFFFFF;
     --border: #E3E0D8;
@@ -30,8 +28,8 @@
   body { margin:0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text-primary); }
   button { font-family: inherit; cursor: pointer; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); padding: 10px 16px; font-size: 14px; }
   button.primary { background: var(--navy); color: #fff; border: none; }
-  button.accent { background: var(--brand-gradient); color: #fff; border: none; }
-  input, select { font-family: inherit; font-size: 14px; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border); background: #fff; width: 100%; }
+  button.accent { background: var(--orange); color: #fff; border: none; }
+  input, select { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-weight: 400; font-size: 15px; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border); background: #fff; width: 100%; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
   .label { font-size: 12.5px; color: var(--text-secondary); margin: 0 0 6px; }
   .screen { display: none; }
@@ -45,8 +43,8 @@
   .bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; display: none; background: var(--surface); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); max-width: 640px; margin: 0 auto; }
   .nav-btn { flex: 1; border: none; background: none; padding: 9px 0 8px; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--text-muted); font-size: 11px; }
   .nav-btn svg { width: 22px; height: 22px; stroke: var(--text-muted); }
-  .nav-btn.active { color: var(--brand-green); font-weight: 600; }
-  .nav-btn.active svg { stroke: var(--brand-green); }
+  .nav-btn.active { color: var(--orange); font-weight: 600; }
+  .nav-btn.active svg { stroke: var(--orange); }
 </style>
 </head>
 <body>
@@ -255,8 +253,10 @@ function dureeMoyenneRecharge(achats, taux) {
 }
 
 function graphiqueConsommationSVG(intervalles) {
+  if (intervalles.length < 2) {
+    return `<p style="font-size:13px;color:var(--text-secondary);margin:0;">Ajoute encore un relevé pour voir l'evolution dans le temps (un seul intervalle ne donne rien a comparer).</p>`;
+  }
   const derniers = intervalles.slice(-8);
-  if (derniers.length === 0) return "";
   const maxTaux = Math.max(...derniers.map((i) => Math.max(0, i.tauxJournalier)), 0.1);
   const width = 300, height = 90, barWidth = width / derniers.length;
   const bars = derniers.map((iv, idx) => {
@@ -356,6 +356,19 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Les champs montant sont formates avec separateur de milliers au blur
+// (jamais pendant la frappe - trop de risques de curseur qui saute).
+// parseMontant retire ces espaces avant de convertir en nombre.
+function parseMontant(str) {
+  return parseFloat(String(str).replace(/[\s\u00A0\u202F]/g, ""));
+}
+function formatMontantInput(input) {
+  const num = parseMontant(input.value);
+  if (!isNaN(num) && num > 0) {
+    input.value = num.toLocaleString("fr-FR");
+  }
+}
+
 // ---------------------------------------------------------------
 // 4. RENDU DES ONGLETS
 // ---------------------------------------------------------------
@@ -370,6 +383,32 @@ const PALIER_STYLE = {
   2: { bg: "var(--warning-bg)", text: "var(--warning-text)", label: "Tranche 2" },
   3: { bg: "var(--danger-bg)", text: "var(--danger-text)", label: "Tranche 3" },
 };
+
+// Icones discretes (currentColor) + helpers pour une hierarchie coherente
+// sur toutes les cartes-statistiques du tableau de bord.
+const ICONS = {
+  wallet: '<path d="M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v3"></path><path d="M3 7v10a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-7a1 1 0 0 0-1-1H6a2 2 0 0 1-2-2z"></path><circle cx="16" cy="14" r="1.4" fill="currentColor" stroke="none"></circle>',
+  coin: '<circle cx="12" cy="12" r="9"></circle><path d="M9 9.5a2.6 2 0 0 1 3-1.8c1.5.3 2 1.3 2 2.1 0 2-4 1.5-4 3.6 0 1 1 1.8 2.5 1.8s2.5-.6 2.5-1.6"></path><path d="M12 6.5v1M12 16v1"></path>',
+  gauge: '<path d="M4 17a8 8 0 1 1 16 0"></path><path d="M12 17l4-6"></path><circle cx="12" cy="17" r="1.3" fill="currentColor" stroke="none"></circle>',
+  bolt: '<path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z" fill="currentColor" stroke="none"></path>',
+  clock: '<circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 3"></path>',
+  refresh: '<path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v4h4"></path>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path>',
+  chart: '<path d="M3 3v18h18"></path><path d="M7 15l4-6 3 3 5-8"></path>',
+};
+
+function statHead(iconKey, label, color) {
+  color = color || "var(--text-muted)";
+  return `<div style="display:flex;align-items:center;gap:5px;margin-bottom:7px;color:${color};">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[iconKey]}</svg>
+    <span style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;font-weight:600;">${label}</span>
+  </div>`;
+}
+
+function statValue(value, unit, color) {
+  color = color || "var(--text-primary)";
+  return `<p style="margin:0;font-variant-numeric:tabular-nums;"><span style="font-size:20px;font-weight:700;color:${color};">${value}</span>${unit ? ` <span style="font-size:12px;color:var(--text-muted);">${unit}</span>` : ""}</p>`;
+}
 
 function renderDashboard() {
   const cumul = cumulMoisEnCours(achats);
@@ -397,12 +436,18 @@ function renderDashboard() {
   tabContent.innerHTML = `
     <div class="grid" style="margin-bottom:20px;">
       <div class="card" style="background:${style.bg};border-color:transparent;">
-        <p class="label" style="color:${style.text};">kWh achetes ce mois</p>
-        <p style="font-size:20px;font-weight:600;margin:0 0 3px;color:${style.text};">${cumul.toFixed(1)} kWh</p>
-        <p style="font-size:11px;margin:0;color:${style.text};">${style.label}</p>
+        ${statHead("wallet", "kWh achetes ce mois", style.text)}
+        ${statValue(cumul.toFixed(1), "kWh", style.text)}
+        <p style="font-size:11px;margin:6px 0 0;color:${style.text};">${style.label}</p>
       </div>
-      <div class="card"><p class="label">Cout moyen / kWh</p><p style="font-size:22px;font-weight:600;margin:0;">${coutMoyen ? coutMoyen + " F" : "-"}</p></div>
-      <div class="card"><p class="label">Solde compteur</p><p style="font-size:22px;font-weight:600;margin:0;">${dernierReleve ? dernierReleve.soldeKwh + " kWh" : "-"}</p></div>
+      <div class="card">
+        ${statHead("coin", "Cout moyen / kWh")}
+        ${statValue(coutMoyen ? coutMoyen : "-", coutMoyen ? "F" : "")}
+      </div>
+      <div class="card">
+        ${statHead("gauge", "Solde compteur")}
+        ${statValue(dernierReleve ? dernierReleve.soldeKwh : "-", dernierReleve ? "kWh" : "")}
+      </div>
     </div>
 
     <div style="margin-bottom:20px;">
@@ -422,13 +467,26 @@ function renderDashboard() {
       ${releves.length < 2
         ? `<p style="font-size:13px;color:var(--text-secondary);margin:0;">Ajoute au moins 2 releves espaces dans le temps (onglet Releves) pour activer les previsions.</p>`
         : `
-          <div class="grid" style="margin-bottom:14px;">
-            <div><p class="label">Rythme moyen</p><p style="font-size:18px;font-weight:600;margin:0;">${taux !== null ? taux.toFixed(2) + " kWh/j" : "-"}</p></div>
-            <div><p class="label">Jours restants</p><p style="font-size:18px;font-weight:600;margin:0;">${prevision ? Math.round(prevision.joursRestants) + " j" : "-"}</p></div>
-            <div><p class="label">Duree d'une recharge</p><p style="font-size:18px;font-weight:600;margin:0;">${dureeRecharge !== null ? Math.round(dureeRecharge) + " j" : "-"}</p></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;margin-bottom:16px;">
+            <div style="padding:0 14px 16px 0;border-right:1px solid var(--border);border-bottom:1px solid var(--border);">
+              ${statHead("bolt", "Rythme moyen")}
+              ${statValue(taux !== null ? taux.toFixed(2) : "-", taux !== null ? "kWh/j" : "")}
+            </div>
+            <div style="padding:0 0 16px 14px;border-bottom:1px solid var(--border);">
+              ${statHead("clock", "Jours restants")}
+              ${statValue(prevision ? Math.round(prevision.joursRestants) : "-", prevision ? "j" : "")}
+            </div>
+            <div style="padding:16px 14px 0 0;border-right:1px solid var(--border);">
+              ${statHead("refresh", "Duree recharge")}
+              ${statValue(dureeRecharge !== null ? Math.round(dureeRecharge) : "-", dureeRecharge !== null ? "j" : "")}
+            </div>
+            <div style="padding:16px 0 0 14px;">
+              ${statHead("calendar", "A sec le")}
+              ${statValue(prevision ? prevision.dateEstimee.toLocaleDateString("fr-FR") : "-", "", prevision ? "var(--danger-text)" : undefined)}
+            </div>
           </div>
-          ${prevision ? `<p style="font-size:13px;color:var(--text-secondary);margin:0 0 14px;">A ce rythme, le compteur serait a sec vers le <strong style="color:var(--text-primary);">${prevision.dateEstimee.toLocaleDateString("fr-FR")}</strong>.</p>` : ""}
-          <p class="label" style="margin-bottom:6px;">Consommation par periode entre releves (kWh/jour)</p>
+          <div style="height:1px;background:var(--border);margin:0 0 14px;"></div>
+          ${statHead("chart", "Conso par periode (kWh/j)")}
           ${graphiqueConsommationSVG(intervalles)}
           ${aAnomalie ? `<p style="font-size:12px;color:var(--danger-text);margin:8px 0 0;">Une periode en rouge signale une baisse incoherente avec les achats enregistres sur cette periode - verifie tes saisies.</p>` : ""}
         `
@@ -438,7 +496,7 @@ function renderDashboard() {
     <div class="card">
       <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Simulateur d'achat</p>
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-        <input type="number" id="sim-montant" placeholder="Montant en FCFA" style="flex:1;min-width:140px;" />
+        <input type="text" inputmode="decimal" id="sim-montant" placeholder="Montant en FCFA" style="flex:1;min-width:140px;" />
         <button class="accent" id="sim-btn">Simuler</button>
       </div>
       <p style="font-size:12.5px;color:var(--text-muted);margin:0 0 8px;">${estPremierAchatDuMois(achats) ? "Ce serait ton 1er achat du mois (redevance appliquee)." : "Redevance deja payee ce mois-ci."}</p>
@@ -446,18 +504,35 @@ function renderDashboard() {
     </div>
   `;
 
+  const simMontantEl = document.getElementById("sim-montant");
+  const simResultEl = document.getElementById("sim-result");
+
+  simMontantEl.addEventListener("input", () => {
+    simResultEl.innerHTML = "";
+  });
+  simMontantEl.addEventListener("blur", () => formatMontantInput(simMontantEl));
+
   document.getElementById("sim-btn").addEventListener("click", () => {
-    const val = parseFloat(document.getElementById("sim-montant").value);
-    const resultEl = document.getElementById("sim-result");
+    const val = parseMontant(simMontantEl.value);
     if (!val || val <= 0) {
-      resultEl.innerHTML = `<p style="font-size:13px;color:var(--danger-text);margin:0;">Entre un montant valide.</p>`;
+      simResultEl.innerHTML = `<p style="font-size:13px;color:var(--danger-text);margin:0;">Entre un montant valide.</p>`;
       return;
     }
     const res = calculerKwh(val, cumul, estPremierAchatDuMois(achats));
     if (res.erreur === "montant_insuffisant") {
-      resultEl.innerHTML = `<p style="font-size:14px;margin:0;">Montant insuffisant pour couvrir la redevance mensuelle.</p>`;
+      simResultEl.innerHTML = `<p style="font-size:14px;margin:0;">Montant insuffisant pour couvrir la redevance mensuelle.</p>`;
     } else {
-      resultEl.innerHTML = `<p style="font-size:14px;color:var(--text-secondary);margin:0;">Estimation: <strong style="color:var(--text-primary);">${res.kwh} kWh</strong> credites (cumul apres achat: ${res.cumulApres} kWh).</p>`;
+      const resStyle = PALIER_STYLE[palierActuel(res.cumulApres)];
+      simResultEl.innerHTML = `
+        <div style="background:${resStyle.bg};border-radius:10px;padding:14px;">
+          ${statHead("bolt", "kWh credites", resStyle.text)}
+          <p style="margin:0 0 4px;"><span style="font-size:24px;font-weight:700;color:${resStyle.text};">${res.kwh}</span> <span style="font-size:13px;color:${resStyle.text};">kWh</span></p>
+          <span style="display:inline-block;background:var(--surface);color:${resStyle.text};font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;">${resStyle.label}</span>
+          <div style="height:1px;background:${resStyle.text};opacity:0.18;margin:12px 0 10px;"></div>
+          ${statHead("wallet", "Cumul apres achat", resStyle.text)}
+          <p style="margin:0;font-size:15px;font-weight:600;color:${resStyle.text};">${res.cumulApres} kWh</p>
+        </div>
+      `;
     }
   });
 }
@@ -470,7 +545,7 @@ function renderAchats() {
     <form id="achat-form" class="card" style="margin-bottom:20px;">
       <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Ajouter un achat</p>
       <div class="grid" style="margin-bottom:10px;">
-        <div><p class="label">Montant (FCFA)</p><input type="number" id="a-montant" /></div>
+        <div><p class="label">Montant (FCFA)</p><input type="text" inputmode="decimal" id="a-montant" /></div>
         <div><p class="label">Date</p><input type="date" id="a-date" value="${todayStr()}" /></div>
         <div><p class="label">Mode de paiement</p>
           <select id="a-mode">
@@ -479,7 +554,7 @@ function renderAchats() {
             <option value="especes">Especes (+1%)</option>
           </select>
         </div>
-        <div><p class="label">kWh recus (SMS Woyofal)</p><input type="number" id="a-kwh" /></div>
+        <div><p class="label">kWh recus (SMS Woyofal)</p><input type="text" inputmode="decimal" id="a-kwh" /></div>
       </div>
       <p style="font-size:12.5px;color:var(--text-muted);margin:0 0 10px;">Le champ kWh se pre-remplit en quittant le champ montant - corrige-le avec le chiffre reel recu par SMS.</p>
       <p id="a-error" style="font-size:13px;color:var(--danger-text);margin:0 0 10px;display:none;"></p>
@@ -499,15 +574,18 @@ function renderAchats() {
   `;
 
   document.getElementById("a-montant").addEventListener("blur", () => {
-    const val = parseFloat(document.getElementById("a-montant").value);
-    if (!val || val <= 0) return;
-    const res = calculerKwh(val, cumul, premierAchat);
-    if (!res.erreur) document.getElementById("a-kwh").value = res.kwh;
+    const montantEl = document.getElementById("a-montant");
+    const val = parseMontant(montantEl.value);
+    if (val > 0) {
+      const res = calculerKwh(val, cumul, premierAchat);
+      if (!res.erreur) document.getElementById("a-kwh").value = res.kwh;
+    }
+    formatMontantInput(montantEl);
   });
 
   document.getElementById("achat-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const montant = parseFloat(document.getElementById("a-montant").value);
+    const montant = parseMontant(document.getElementById("a-montant").value);
     const kwh = parseFloat(document.getElementById("a-kwh").value);
     const date = document.getElementById("a-date").value;
     const modePaiement = document.getElementById("a-mode").value;
@@ -528,7 +606,7 @@ function renderReleves() {
     <form id="releve-form" class="card" style="margin-bottom:20px;">
       <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Ajouter un releve</p>
       <div class="grid" style="margin-bottom:10px;">
-        <div><p class="label">Solde kWh restant (ecran du compteur)</p><input type="number" id="r-solde" /></div>
+        <div><p class="label">Solde kWh restant (ecran du compteur)</p><input type="text" inputmode="decimal" id="r-solde" /></div>
         <div><p class="label">Date</p><input type="date" id="r-date" value="${todayStr()}" /></div>
       </div>
       <p id="r-error" style="font-size:13px;color:var(--danger-text);margin:0 0 10px;display:none;"></p>
