@@ -959,6 +959,10 @@ function exporterRelevesCSV() {
   telechargerFichier(`woyofal-releves-${nomCompteurPourFichier()}-${todayStr()}.csv`, "\uFEFF" + lignes.join("\r\n"), "text/csv;charset=utf-8;");
 }
 
+function formatMontantPdf(n) {
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+}
+
 function enteteDocPdf(docPdf, sousTitre) {
   const c = compteurs.find((c) => c.id === compteurActifId);
   const infosCat = c ? TARIFS_PAR_CATEGORIE[c.categorieTarifaire] : null;
@@ -998,7 +1002,7 @@ function exporterAchatsPDF() {
     if (i % 2 === 0) { docPdf.setFillColor(247, 246, 242); docPdf.rect(14, y - 5, 182, 7, "F"); }
     const d = toDate(a.date);
     docPdf.text(`${d.toLocaleDateString("fr-FR")} ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`, 16, y);
-    docPdf.text(`${a.montant.toLocaleString("fr-FR")} F`, 96, y, { align: "right" });
+    docPdf.text(`${formatMontantPdf(a.montant)} F`, 96, y, { align: "right" });
     docPdf.text(`${a.kwh}`, 130, y, { align: "right" });
     docPdf.text(LABELS_MODE_PAIEMENT[a.modePaiement] || a.modePaiement || "", 155, y);
     totalMontant += a.montant || 0;
@@ -1012,7 +1016,7 @@ function exporterAchatsPDF() {
   docPdf.setFontSize(10);
   docPdf.setTextColor(27, 58, 82);
   docPdf.text("Total", 16, y);
-  docPdf.text(`${totalMontant.toLocaleString("fr-FR")} F`, 96, y, { align: "right" });
+  docPdf.text(`${formatMontantPdf(totalMontant)} F`, 96, y, { align: "right" });
   docPdf.text(`${Math.round(totalKwh * 100) / 100}`, 130, y, { align: "right" });
 
   docPdf.save(`woyofal-achats-${nomCompteurPourFichier()}-${todayStr()}.pdf`);
