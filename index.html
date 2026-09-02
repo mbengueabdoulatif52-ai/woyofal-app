@@ -63,7 +63,10 @@
   <div id="top-header" class="top-header">
     <div style="display:flex;align-items:center;gap:9px;">
       <img src="icon-192.png" width="26" height="26" style="border-radius:6px;display:block;flex-shrink:0;" alt="Woyofal" />
-      <span style="font-weight:600;font-size:16px;">Woyofal</span>
+      <div>
+        <span style="font-weight:600;font-size:16px;display:block;line-height:1.2;">Woyofal</span>
+        <span id="compteur-actif-label" style="font-size:11px;color:var(--text-secondary);cursor:pointer;"></span>
+      </div>
     </div>
     <div style="display:flex;gap:14px;align-items:center;">
       <button id="compteurs-btn" class="icon-btn" aria-label="Mes compteurs" title="Mes compteurs">
@@ -568,13 +571,15 @@ let compteursModalOuvert = false;
 let compteurEnRenommageId = null;
 let ajoutCompteurOuvert = false;
 
-document.getElementById("compteurs-btn").addEventListener("click", () => {
+function ouvrirCompteursModal() {
   compteursModalOuvert = true;
   compteurEnRenommageId = null;
   ajoutCompteurOuvert = false;
   renderCompteursListe();
   compteursModal.style.display = "flex";
-});
+}
+document.getElementById("compteurs-btn").addEventListener("click", ouvrirCompteursModal);
+document.getElementById("compteur-actif-label").addEventListener("click", ouvrirCompteursModal);
 document.getElementById("compteurs-close").addEventListener("click", () => {
   compteursModalOuvert = false;
   compteursModal.style.display = "none";
@@ -724,6 +729,8 @@ onAuthStateChanged(auth, async (user) => {
     const idEnregistre = userSnap.exists() ? userSnap.data().compteurActifId : null;
     compteurActifId = idsExistants.includes(idEnregistre) ? idEnregistre : idsExistants[0];
 
+    mettreAJourCategorieActuelle();
+    mettreAJourLabelCompteurActif();
     if (compteurActifId) activerListenersCompteur(user.uid, compteurActifId);
   } else {
     mainScreen.classList.remove("visible");
@@ -771,9 +778,17 @@ function listenCompteurs(uid) {
   unsubCompteurs = onSnapshot(collection(db, "users", uid, "compteurs"), (snap) => {
     compteurs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     mettreAJourCategorieActuelle();
+    mettreAJourLabelCompteurActif();
     render();
-    if (compteursModalOuvert) renderCompteursListe();
+    renderCompteursListe();
   });
+}
+
+function mettreAJourLabelCompteurActif() {
+  const labelEl = document.getElementById("compteur-actif-label");
+  if (!labelEl) return;
+  const c = compteurs.find((c) => c.id === compteurActifId);
+  labelEl.textContent = c ? c.nom : "";
 }
 
 function activerListenersCompteur(uid, compteurId) {
@@ -789,7 +804,9 @@ async function switcherCompteur(id) {
   compteurActifId = id;
   await setDoc(doc(db, "users", currentUser.uid), { compteurActifId: id }, { merge: true });
   mettreAJourCategorieActuelle();
+  mettreAJourLabelCompteurActif();
   activerListenersCompteur(currentUser.uid, id);
+  renderCompteursListe();
   render();
 }
 
