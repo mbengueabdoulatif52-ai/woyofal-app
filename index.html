@@ -419,6 +419,8 @@ function joursEntre(d1, d2) {
 }
 
 function intervallesConsommation(releves, achats) {
+  const RYTHME_MAX_PLAUSIBLE = 50; // kWh/jour - au-dela, c'est forcement une erreur de saisie
+  // ou une ambiguite d'ordre achat/releve le meme jour (on ne suit que la date, pas l'heure).
   const sorted = [...releves].sort((a, b) => toDate(a.date) - toDate(b.date));
   const intervalles = [];
   for (let i = 0; i < sorted.length - 1; i++) {
@@ -430,10 +432,11 @@ function intervallesConsommation(releves, achats) {
       .filter((a) => toDate(a.date) > toDate(debut.date) && toDate(a.date) <= toDate(fin.date))
       .reduce((s, a) => s + (a.kwh || 0), 0);
     const conso = debut.soldeKwh + achatsEntre - fin.soldeKwh;
+    const tauxJournalier = conso / jours;
     intervalles.push({
       debut: debut.date, fin: fin.date, jours,
-      conso, tauxJournalier: conso / jours,
-      anomalie: conso < 0,
+      conso, tauxJournalier,
+      anomalie: conso < 0 || tauxJournalier > RYTHME_MAX_PLAUSIBLE,
     });
   }
   return intervalles;
@@ -752,7 +755,7 @@ function renderDashboard() {
           <div style="height:1px;background:var(--border);margin:0 0 14px;"></div>
           ${statHead("chart", "Conso par periode (kWh/j)")}
           ${graphiqueConsommationSVG(intervalles)}
-          ${aAnomalie ? `<p style="font-size:12px;color:var(--danger-text);margin:8px 0 0;">Une periode en rouge signale une baisse incoherente avec les achats enregistres sur cette periode - verifie tes saisies.</p>` : ""}
+          ${aAnomalie ? `<p style="font-size:12px;color:var(--danger-text);margin:8px 0 0;">Une periode en rouge signale un rythme incoherent (negatif ou irrealiste) sur cette periode - souvent un achat et un releve enregistres le meme jour dans le mauvais ordre. Cet intervalle est exclu du rythme moyen.</p>` : ""}
         `
       }
     </div>
