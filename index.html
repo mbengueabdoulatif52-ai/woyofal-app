@@ -991,7 +991,7 @@ function renderAchats() {
   tabContent.innerHTML = `
     <form id="achat-form" class="card" style="margin-bottom:20px;">
       <p style="font-size:14px;font-weight:600;margin:0 0 14px;">${achatEdite ? "Modifier l'achat" : "Ajouter un achat"}</p>
-      <div class="grid" style="margin-bottom:14px;">
+      <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px;">
         <div>
           ${statHead("wallet", "Montant (FCFA)")}
           <input type="text" inputmode="decimal" id="a-montant" value="${achatEdite ? achatEdite.montant : ""}" />
@@ -1148,7 +1148,7 @@ function renderReleves() {
   tabContent.innerHTML = `
     <form id="releve-form" class="card" style="margin-bottom:20px;">
       <p style="font-size:14px;font-weight:600;margin:0 0 14px;">${releveEdite ? "Modifier le releve" : "Ajouter un releve"}</p>
-      <div class="grid" style="margin-bottom:14px;">
+      <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px;">
         <div>
           ${statHead("gauge", "Solde kWh restant")}
           <input type="text" inputmode="decimal" id="r-solde" value="${releveEdite ? releveEdite.soldeKwh : ""}" />
