@@ -263,6 +263,120 @@ function kwhRestantAvantProchainPalier(cumulKwh, tarifs) {
   return Math.max(0, tranche.max - cumulKwh);
 }
 
+// ---------------------------------------------------------------
+// 2b. OPTIMISEUR D'ACHAT MULTI-MOIS
+// Chaque mois "frais" (a partir du 2e) repart a 0 kWh et redemande la
+// redevance mensuelle - donc etaler n'est rentable que si l'acces a la
+// tranche 1 (moins chere) du mois suivant compense ce cout fixe. Les
+// deux fonctions ci-dessous remplissent les tranches disponibles par
+// prix croissant (les moins cheres d'abord, tous mois confondus).
+// ---------------------------------------------------------------
+function genererSlotsMultiMois(nMois, cumulActuel, tarifs) {
+  const slots = [];
+  for (let m = 0; m < nMois; m++) {
+    let cum = m === 0 ? cumulActuel : 0;
+    for (const tranche of tarifs.tranches) {
+      const plafond = tranche.max === null ? Infinity : tranche.max;
+      if (cum >= plafond) continue;
+      const capacite = plafond - cum;
+      const prixUnitaire = tranche.tvaApplicable ? tranche.prix * (1 + tarifs.tva) : tranche.prix;
+      slots.push({ mois: m, capacite, prixUnitaire });
+      cum = plafond;
+    }
+  }
+  slots.sort((a, b) => a.prixUnitaire - b.prixUnitaire);
+  return slots;
+}
+
+function redevancesParMois(nMois, premierMoisEstPremier, tarifs) {
+  const redevances = [];
+  for (let m = 0; m < nMois; m++) {
+    redevances.push((m === 0 ? premierMoisEstPremier : true) ? tarifs.redevanceMensuelle : 0);
+  }
+  return redevances;
+}
+
+// Budget fixe -> maximiser le kWh obtenu. La redevance d'un mois n'est
+// prelevee que lorsqu'on achete reellement quelque chose dans ce mois -
+// sinon etaler sur plus de mois serait toujours pire, meme quand ca
+// n'aide pas (redevance payee pour rien).
+function planifierParBudget(budget, nMois, cumulActuel, premierMoisEstPremier, tarifs) {
+  tarifs = tarifs || getTarifsActuels();
+  const redevances = redevancesParMois(nMois, premierMoisEstPremier, tarifs);
+  const slots = genererSlotsMultiMois(nMois, cumulActuel, tarifs);
+  const detail = Array.from({ length: nMois }, () => ({ montant: 0, kwh: 0 }));
+  const redevancePayee = Array(nMois).fill(false);
+  let budgetRestant = budget;
+  let kwhTotal = 0;
+
+  for (const slot of slots) {
+    if (budgetRestant <= 0.01) break;
+    const m = slot.mois;
+    if (!redevancePayee[m]) {
+      const r = redevances[m];
+      if (budgetRestant < r) continue;
+      budgetRestant -= r;
+      detail[m].montant += r;
+      redevancePayee[m] = true;
+    }
+    const netDispo = budgetRestant * (1 - tarifs.taxeCommunale);
+    const coutNetSlotMax = slot.capacite === Infinity ? Infinity : slot.capacite * slot.prixUnitaire;
+    let kwhAjoute, montantReelUtilise;
+    if (coutNetSlotMax !== Infinity && netDispo >= coutNetSlotMax) {
+      kwhAjoute = slot.capacite;
+      montantReelUtilise = coutNetSlotMax / (1 - tarifs.taxeCommunale);
+    } else {
+      kwhAjoute = netDispo / slot.prixUnitaire;
+      montantReelUtilise = budgetRestant;
+    }
+    detail[m].montant += montantReelUtilise;
+    detail[m].kwh += kwhAjoute;
+    kwhTotal += kwhAjoute;
+    budgetRestant -= montantReelUtilise;
+  }
+
+  const detailFinal = detail.filter((d) => d.montant > 0).map((d) => ({
+    montant: Math.round(d.montant), kwh: Math.round(d.kwh * 100) / 100,
+  }));
+  const redevanceTotale = redevances.reduce((a, b, i) => a + (redevancePayee[i] ? b : 0), 0);
+
+  if (kwhTotal <= 0) return { erreur: "budget_insuffisant_redevances", redevanceTotale };
+  return { kwhTotal: Math.round(kwhTotal * 100) / 100, redevanceTotale, detail: detailFinal, erreur: null };
+}
+
+// kWh cible -> minimiser le montant total. Meme principe : un mois qui ne
+// sert a rien n'est jamais ouvert (sa redevance n'est jamais payee).
+function planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, tarifs) {
+  tarifs = tarifs || getTarifsActuels();
+  const redevances = redevancesParMois(nMois, premierMoisEstPremier, tarifs);
+  const slots = genererSlotsMultiMois(nMois, cumulActuel, tarifs);
+  const detail = Array.from({ length: nMois }, () => ({ montant: 0, kwh: 0 }));
+  const redevancePayee = Array(nMois).fill(false);
+  let kwhRestant = kwhCible;
+
+  for (const slot of slots) {
+    if (kwhRestant <= 0.001) break;
+    const m = slot.mois;
+    if (!redevancePayee[m]) {
+      detail[m].montant += redevances[m];
+      redevancePayee[m] = true;
+    }
+    const kwhPris = Math.min(kwhRestant, slot.capacite);
+    const montantReel = (kwhPris * slot.prixUnitaire) / (1 - tarifs.taxeCommunale);
+    detail[m].montant += montantReel;
+    detail[m].kwh += kwhPris;
+    kwhRestant -= kwhPris;
+  }
+
+  const detailFinal = detail.filter((d) => d.montant > 0).map((d) => ({
+    montant: Math.round(d.montant), kwh: Math.round(d.kwh * 100) / 100,
+  }));
+  const redevanceTotale = redevances.reduce((a, b, i) => a + (redevancePayee[i] ? b : 0), 0);
+  const montantTotal = detailFinal.reduce((s, d) => s + d.montant, 0);
+
+  return { montantTotal, redevanceTotale, detail: detailFinal, erreur: null };
+}
+
 function toDate(d) {
   if (!d) return new Date(0);
   if (typeof d.toDate === "function") return d.toDate();
@@ -642,6 +756,20 @@ function renderDashboard() {
       <p style="font-size:12.5px;color:var(--text-muted);margin:0 0 8px;">${estPremierAchatDuMois(achats) ? "Ce serait ton 1er achat du mois (redevance appliquee)." : "Redevance deja payee ce mois-ci."}</p>
       <div id="sim-result"></div>
     </div>
+
+    <div class="card" style="margin-top:20px;">
+      <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Optimiseur d'achat</p>
+      <div style="display:flex;background:var(--bg);border-radius:8px;padding:3px;margin-bottom:14px;">
+        <button id="opt-mode-budget" style="flex:1;text-align:center;padding:7px;font-size:12.5px;border:none;border-radius:6px;background:var(--surface);font-weight:600;color:var(--text-primary);">Mon budget</button>
+        <button id="opt-mode-kwh" style="flex:1;text-align:center;padding:7px;font-size:12.5px;border:none;border-radius:6px;background:none;color:var(--text-muted);font-weight:400;">Mon besoin en kWh</button>
+      </div>
+      <p id="opt-label" style="font-size:12px;color:var(--text-muted);margin:0 0 8px;">Combien veux-tu depenser au total ?</p>
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <input type="text" inputmode="decimal" id="opt-input" placeholder="Montant en FCFA" style="flex:1;" />
+        <button class="accent" id="opt-btn">Comparer</button>
+      </div>
+      <div id="opt-result"></div>
+    </div>
   `;
 
   const simMontantEl = document.getElementById("sim-montant");
@@ -674,6 +802,123 @@ function renderDashboard() {
         </div>
       `;
     }
+  });
+
+  // --- Optimiseur d'achat ---
+  let optMode = "budget";
+  const optModeBudgetBtn = document.getElementById("opt-mode-budget");
+  const optModeKwhBtn = document.getElementById("opt-mode-kwh");
+  const optLabelEl = document.getElementById("opt-label");
+  const optInputEl = document.getElementById("opt-input");
+  const optResultEl = document.getElementById("opt-result");
+
+  function majModeOptimiseur() {
+    const surBudget = optMode === "budget";
+    optModeBudgetBtn.style.background = surBudget ? "var(--surface)" : "none";
+    optModeBudgetBtn.style.fontWeight = surBudget ? "600" : "400";
+    optModeBudgetBtn.style.color = surBudget ? "var(--text-primary)" : "var(--text-muted)";
+    optModeKwhBtn.style.background = surBudget ? "none" : "var(--surface)";
+    optModeKwhBtn.style.fontWeight = surBudget ? "400" : "600";
+    optModeKwhBtn.style.color = surBudget ? "var(--text-muted)" : "var(--text-primary)";
+    optLabelEl.textContent = surBudget ? "Combien veux-tu depenser au total ?" : "De combien de kWh as-tu besoin au total ?";
+    optInputEl.placeholder = surBudget ? "Montant en FCFA" : "kWh souhaites";
+    optInputEl.value = "";
+    optResultEl.innerHTML = "";
+  }
+
+  optModeBudgetBtn.addEventListener("click", () => { optMode = "budget"; majModeOptimiseur(); });
+  optModeKwhBtn.addEventListener("click", () => { optMode = "kwh"; majModeOptimiseur(); });
+  optInputEl.addEventListener("input", () => { optResultEl.innerHTML = ""; });
+
+  function rendreOptionOptimiseur(titre, badgeAchats, estMeilleure, headline, sousTexte, detail, insuffisant) {
+    const bg = estMeilleure ? "var(--success-bg)" : "var(--surface)";
+    const borderCol = estMeilleure ? "transparent" : "var(--border)";
+    const couleur = estMeilleure ? "var(--success-text)" : "var(--text-primary)";
+    if (insuffisant) {
+      return `<div class="card" style="border-color:var(--border);margin-bottom:10px;padding:14px;"><p style="font-size:13px;color:var(--text-muted);margin:0;">${titre} : montant insuffisant pour couvrir les redevances de ${badgeAchats.toLowerCase()}.</p></div>`;
+    }
+    const detailHtml = detail.length > 1 ? detail.map((d, i) => `
+      <div style="background:var(--surface);border-radius:8px;padding:10px 12px;margin-top:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-primary);margin-bottom:2px;">
+          <span style="font-weight:600;">${i === 0 ? "Achat 1 - maintenant" : "Achat " + (i + 1) + " - mois +" + i}</span>
+          <span style="font-weight:600;">${d.montant.toLocaleString("fr-FR")} F</span>
+        </div>
+        <p style="font-size:11.5px;color:var(--text-muted);margin:0;">${d.kwh} kWh</p>
+      </div>
+    `).join("") : "";
+    return `
+      <div style="border:1px solid ${borderCol};border-radius:10px;padding:14px;margin-bottom:10px;background:${bg};">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:13px;font-weight:600;color:${couleur};">${titre}</span>
+          <span style="font-size:11px;color:${estMeilleure ? couleur : "var(--text-muted)"};">${badgeAchats}</span>
+        </div>
+        <p style="font-size:20px;font-weight:700;margin:6px 0 ${sousTexte ? "4px" : "0"};color:${couleur};">${headline}</p>
+        ${sousTexte ? `<p style="font-size:12px;color:${couleur};margin:0;">${sousTexte}</p>` : ""}
+        ${detailHtml}
+      </div>
+    `;
+  }
+
+  document.getElementById("opt-btn").addEventListener("click", () => {
+    const val = parseMontant(optInputEl.value);
+    if (!val || val <= 0) {
+      optResultEl.innerHTML = `<p style="font-size:13px;color:var(--danger-text);margin:0;">Entre une valeur valide.</p>`;
+      return;
+    }
+    const tarifsActuels = getTarifsActuels();
+    const premier = estPremierAchatDuMois(achats);
+    const titres = ["Tout maintenant", "Etale sur 2 mois", "Etale sur 3 mois"];
+    const badges = ["1 achat", "2 achats", "3 achats"];
+
+    const resultats = [1, 2, 3].map((n) =>
+      optMode === "budget"
+        ? planifierParBudget(val, n, cumul, premier, tarifsActuels)
+        : planifierParKwh(val, n, cumul, premier, tarifsActuels)
+    );
+
+    let meilleurIndex = 0;
+    resultats.forEach((r, i) => {
+      if (r.erreur) return;
+      if (optMode === "budget") {
+        if (resultats[meilleurIndex].erreur || r.kwhTotal > resultats[meilleurIndex].kwhTotal) meilleurIndex = i;
+      } else {
+        if (resultats[meilleurIndex].erreur || r.montantTotal < resultats[meilleurIndex].montantTotal) meilleurIndex = i;
+      }
+    });
+
+    let html = "";
+    resultats.forEach((r, i) => {
+      if (r.erreur) {
+        html += rendreOptionOptimiseur(titres[i], badges[i], false, "", "", [], true);
+        return;
+      }
+      let headline, sousTexte = null;
+      if (optMode === "budget") {
+        headline = taux ? Math.round(r.kwhTotal / taux) + " jours" : r.kwhTotal + " kWh";
+        if (i > 0 && !resultats[0].erreur) {
+          const gainKwh = r.kwhTotal - resultats[0].kwhTotal;
+          if (gainKwh > 0.5) {
+            const gainF = Math.round(gainKwh * tarifsActuels.tranches[0].prix);
+            sousTexte = `Equivaut a ${gainF.toLocaleString("fr-FR")} F d'electricite en plus, meme budget`;
+          } else {
+            sousTexte = "Pas mieux que l'option precedente ici";
+          }
+        }
+      } else {
+        headline = r.montantTotal.toLocaleString("fr-FR") + " F";
+        if (i > 0 && !resultats[0].erreur) {
+          const diff = resultats[0].montantTotal - r.montantTotal;
+          sousTexte = diff > 0 ? `${diff.toLocaleString("fr-FR")} F de moins que tout maintenant` : "Pas moins cher que tout maintenant";
+        }
+      }
+      html += rendreOptionOptimiseur(titres[i], badges[i], i === meilleurIndex, headline, sousTexte, r.detail, false);
+    });
+
+    if (prevision) {
+      html += `<div style="background:var(--warning-bg);border-radius:8px;padding:10px 12px;"><p style="font-size:12px;color:var(--warning-text);margin:0;line-height:1.5;">A ton rythme actuel, ton solde compteur tient environ ${Math.round(prevision.joursRestants)} jours - verifie que ca suffise avant le prochain achat prevu pour les options etalees.</p></div>`;
+    }
+
+    optResultEl.innerHTML = html;
   });
 }
 
