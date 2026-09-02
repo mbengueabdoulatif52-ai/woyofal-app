@@ -1157,9 +1157,9 @@ const ICONS = {
 
 function statHead(iconKey, label, color) {
   color = color || "var(--text-muted)";
-  return `<div style="display:flex;align-items:center;gap:5px;margin-bottom:7px;color:${color};">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[iconKey]}</svg>
-    <span style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;font-weight:600;">${label}</span>
+  return `<div style="display:flex;align-items:flex-start;gap:5px;margin-bottom:7px;min-height:26px;color:${color};">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;">${ICONS[iconKey]}</svg>
+    <span style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;font-weight:600;line-height:1.3;">${label}</span>
   </div>`;
 }
 
