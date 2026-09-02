@@ -121,7 +121,7 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, addDoc, deleteDoc, doc, query, orderBy, onSnapshot, Timestamp, setDoc
+  getFirestore, collection, addDoc, deleteDoc, doc, query, orderBy, onSnapshot, Timestamp, setDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ---------------------------------------------------------------
@@ -498,6 +498,8 @@ let currentUser = null;
 let currentTab = "dashboard";
 let achats = [];
 let releves = [];
+let achatEnEditionId = null;
+let releveEnEditionId = null;
 let unsubAchats = null;
 let unsubReleves = null;
 let unsubUser = null;
@@ -567,7 +569,7 @@ onAuthStateChanged(auth, (user) => {
     if (unsubAchats) unsubAchats();
     if (unsubReleves) unsubReleves();
     if (unsubUser) unsubUser();
-    achats = []; releves = []; categorieTarifaire = "DPP";
+    achats = []; releves = []; categorieTarifaire = "DPP"; achatEnEditionId = null; releveEnEditionId = null;
   }
 });
 
@@ -604,12 +606,22 @@ async function ajouterAchat({ montant, kwh, modePaiement, date }) {
     montant, kwh, modePaiement, date: Timestamp.fromDate(new Date(date)), createdAt: Timestamp.now(),
   });
 }
+async function modifierAchat(id, { montant, kwh, modePaiement, date }) {
+  await updateDoc(doc(db, "users", currentUser.uid, "achats", id), {
+    montant, kwh, modePaiement, date: Timestamp.fromDate(new Date(date)),
+  });
+}
 async function supprimerAchat(id) {
   await deleteDoc(doc(db, "users", currentUser.uid, "achats", id));
 }
 async function ajouterReleve({ soldeKwh, date }) {
   await addDoc(collection(db, "users", currentUser.uid, "releves"), {
     soldeKwh, date: Timestamp.fromDate(new Date(date)), createdAt: Timestamp.now(),
+  });
+}
+async function modifierReleve(id, { soldeKwh, date }) {
+  await updateDoc(doc(db, "users", currentUser.uid, "releves", id), {
+    soldeKwh, date: Timestamp.fromDate(new Date(date)),
   });
 }
 async function supprimerReleve(id) {
@@ -622,10 +634,12 @@ function fmtDateHeure(d) {
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
-function nowLocalDatetimeStr() {
-  const d = new Date();
+function datetimeLocalStr(date) {
   const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+function nowLocalDatetimeStr() {
+  return datetimeLocalStr(new Date());
 }
 
 // Les champs montant sont formates avec separateur de milliers au blur
@@ -972,37 +986,60 @@ function renderDashboard() {
 function renderAchats() {
   const cumul = cumulMoisEnCours(achats);
   const premierAchat = estPremierAchatDuMois(achats);
+  const achatEdite = achatEnEditionId ? achats.find((a) => a.id === achatEnEditionId) : null;
 
   tabContent.innerHTML = `
     <form id="achat-form" class="card" style="margin-bottom:20px;">
-      <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Ajouter un achat</p>
-      <div class="grid" style="margin-bottom:10px;">
-        <div><p class="label">Montant (FCFA)</p><input type="text" inputmode="decimal" id="a-montant" /></div>
-        <div><p class="label">Date et heure</p><input type="datetime-local" id="a-date" value="${nowLocalDatetimeStr()}" /></div>
-        <div><p class="label">Mode de paiement</p>
+      <p style="font-size:14px;font-weight:600;margin:0 0 14px;">${achatEdite ? "Modifier l'achat" : "Ajouter un achat"}</p>
+      <div class="grid" style="margin-bottom:14px;">
+        <div>
+          ${statHead("wallet", "Montant (FCFA)")}
+          <input type="text" inputmode="decimal" id="a-montant" value="${achatEdite ? achatEdite.montant : ""}" />
+        </div>
+        <div>
+          ${statHead("calendar", "Date et heure")}
+          <input type="datetime-local" id="a-date" value="${achatEdite ? datetimeLocalStr(toDate(achatEdite.date)) : nowLocalDatetimeStr()}" />
+        </div>
+        <div>
+          ${statHead("coin", "Mode de paiement")}
           <select id="a-mode">
-            <option value="mobile">Mobile money</option>
-            <option value="carte">Carte</option>
-            <option value="especes">Especes (+1%)</option>
+            <option value="mobile" ${achatEdite && achatEdite.modePaiement === "mobile" ? "selected" : ""}>Mobile money</option>
+            <option value="carte" ${achatEdite && achatEdite.modePaiement === "carte" ? "selected" : ""}>Carte</option>
+            <option value="especes" ${achatEdite && achatEdite.modePaiement === "especes" ? "selected" : ""}>Especes (+1%)</option>
           </select>
         </div>
-        <div><p class="label">kWh recus (SMS Woyofal)</p><input type="text" inputmode="decimal" id="a-kwh" /></div>
+        <div>
+          ${statHead("bolt", "kWh recus (SMS Woyofal)")}
+          <input type="text" inputmode="decimal" id="a-kwh" value="${achatEdite ? achatEdite.kwh : ""}" />
+        </div>
       </div>
       <p style="font-size:12.5px;color:var(--text-muted);margin:0 0 10px;">Le champ kWh se pre-remplit en quittant le champ montant - corrige-le avec le chiffre reel recu par SMS.</p>
       <div id="a-detail" style="margin-bottom:10px;"></div>
       <p id="a-ecart" style="font-size:12px;color:var(--warning-text);margin:0 0 10px;display:none;line-height:1.5;"></p>
       <p id="a-error" style="font-size:13px;color:var(--danger-text);margin:0 0 10px;display:none;"></p>
-      <button type="submit" class="primary">Enregistrer</button>
+      <div style="display:flex;gap:8px;">
+        <button type="submit" class="primary" style="flex:1;">${achatEdite ? "Enregistrer les modifications" : "Enregistrer"}</button>
+        ${achatEdite ? `<button type="button" id="a-annuler-btn">Annuler</button>` : ""}
+      </div>
     </form>
     <p style="font-size:14px;font-weight:600;margin:0 0 8px;">Historique des achats</p>
     ${achats.length === 0
       ? `<p style="color:var(--text-secondary);font-size:14px;">Aucun achat enregistre pour le moment.</p>`
       : `<div class="card" style="padding:0;">${achats.map((a) => `
-          <div class="row">
-            <span style="color:var(--text-secondary);">${fmtDateHeure(a.date)}</span>
-            <span>${a.montant.toLocaleString("fr-FR")} F</span>
-            <span>${a.kwh} kWh</span>
-            <button data-del-achat="${a.id}" style="padding:4px 8px;font-size:12px;">Suppr.</button>
+          <div class="row" style="align-items:center;">
+            <div>
+              <p style="font-size:10.5px;color:var(--text-muted);margin:0 0 2px;">${fmtDateHeure(a.date)}</p>
+              <p style="font-size:14px;font-weight:600;color:var(--text-primary);margin:0;">${a.montant.toLocaleString("fr-FR")} F</p>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <span style="font-size:13px;color:var(--text-secondary);">${a.kwh} kWh</span>
+              <button data-edit-achat="${a.id}" class="icon-btn" aria-label="Modifier">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"></path><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+              </button>
+              <button data-del-achat="${a.id}" class="icon-btn" aria-label="Supprimer">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"></path><path d="M10 11v6M14 11v6"></path><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"></path><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"></path></svg>
+              </button>
+            </div>
           </div>`).join("")}</div>`
     }
   `;
@@ -1075,34 +1112,74 @@ function renderAchats() {
     if (!montant || montant <= 0) { errorEl.style.display = "block"; errorEl.textContent = "Entre un montant valide."; return; }
     if (!kwh || kwh <= 0) { errorEl.style.display = "block"; errorEl.textContent = "Entre le nombre de kWh recus."; return; }
     errorEl.style.display = "none";
-    await ajouterAchat({ montant, kwh, modePaiement, date });
+    if (achatEnEditionId) {
+      await modifierAchat(achatEnEditionId, { montant, kwh, modePaiement, date });
+      achatEnEditionId = null;
+    } else {
+      await ajouterAchat({ montant, kwh, modePaiement, date });
+    }
+  });
+
+  if (achatEdite) {
+    document.getElementById("a-annuler-btn").addEventListener("click", () => {
+      achatEnEditionId = null;
+      render();
+    });
+  }
+
+  tabContent.querySelectorAll("[data-edit-achat]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      achatEnEditionId = btn.dataset.editAchat;
+      render();
+    });
   });
 
   tabContent.querySelectorAll("[data-del-achat]").forEach((btn) => {
-    btn.addEventListener("click", () => supprimerAchat(btn.dataset.delAchat));
+    btn.addEventListener("click", () => {
+      if (achatEnEditionId === btn.dataset.delAchat) achatEnEditionId = null;
+      supprimerAchat(btn.dataset.delAchat);
+    });
   });
 }
 
 function renderReleves() {
+  const releveEdite = releveEnEditionId ? releves.find((r) => r.id === releveEnEditionId) : null;
+
   tabContent.innerHTML = `
     <form id="releve-form" class="card" style="margin-bottom:20px;">
-      <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Ajouter un releve</p>
-      <div class="grid" style="margin-bottom:10px;">
-        <div><p class="label">Solde kWh restant (ecran du compteur)</p><input type="text" inputmode="decimal" id="r-solde" /></div>
-        <div><p class="label">Date et heure</p><input type="datetime-local" id="r-date" value="${nowLocalDatetimeStr()}" /></div>
+      <p style="font-size:14px;font-weight:600;margin:0 0 14px;">${releveEdite ? "Modifier le releve" : "Ajouter un releve"}</p>
+      <div class="grid" style="margin-bottom:14px;">
+        <div>
+          ${statHead("gauge", "Solde kWh restant")}
+          <input type="text" inputmode="decimal" id="r-solde" value="${releveEdite ? releveEdite.soldeKwh : ""}" />
+        </div>
+        <div>
+          ${statHead("calendar", "Date et heure")}
+          <input type="datetime-local" id="r-date" value="${releveEdite ? datetimeLocalStr(toDate(releveEdite.date)) : nowLocalDatetimeStr()}" />
+        </div>
       </div>
       <p id="r-error" style="font-size:13px;color:var(--danger-text);margin:0 0 10px;display:none;"></p>
-      <button type="submit" class="primary">Enregistrer</button>
+      <div style="display:flex;gap:8px;">
+        <button type="submit" class="primary" style="flex:1;">${releveEdite ? "Enregistrer les modifications" : "Enregistrer"}</button>
+        ${releveEdite ? `<button type="button" id="r-annuler-btn">Annuler</button>` : ""}
+      </div>
     </form>
 
     <p style="font-size:14px;font-weight:600;margin:0 0 8px;">Historique des releves</p>
     ${releves.length === 0
       ? `<p style="color:var(--text-secondary);font-size:14px;">Aucun releve enregistre pour le moment.</p>`
       : `<div class="card" style="padding:0;">${releves.map((r) => `
-          <div class="row">
-            <span style="color:var(--text-secondary);">${fmtDateHeure(r.date)}</span>
-            <span>${r.soldeKwh} kWh</span>
-            <button data-del-releve="${r.id}" style="padding:4px 8px;font-size:12px;">Suppr.</button>
+          <div class="row" style="align-items:center;">
+            <p style="font-size:10.5px;color:var(--text-muted);margin:0;">${fmtDateHeure(r.date)}</p>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <span style="font-size:14px;font-weight:600;color:var(--text-primary);">${r.soldeKwh} kWh</span>
+              <button data-edit-releve="${r.id}" class="icon-btn" aria-label="Modifier">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"></path><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+              </button>
+              <button data-del-releve="${r.id}" class="icon-btn" aria-label="Supprimer">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"></path><path d="M10 11v6M14 11v6"></path><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"></path><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"></path></svg>
+              </button>
+            </div>
           </div>`).join("")}</div>`
     }
   `;
@@ -1114,11 +1191,33 @@ function renderReleves() {
     const errorEl = document.getElementById("r-error");
     if (isNaN(soldeKwh) || soldeKwh < 0) { errorEl.style.display = "block"; errorEl.textContent = "Entre un solde kWh valide."; return; }
     errorEl.style.display = "none";
-    await ajouterReleve({ soldeKwh, date });
+    if (releveEnEditionId) {
+      await modifierReleve(releveEnEditionId, { soldeKwh, date });
+      releveEnEditionId = null;
+    } else {
+      await ajouterReleve({ soldeKwh, date });
+    }
+  });
+
+  if (releveEdite) {
+    document.getElementById("r-annuler-btn").addEventListener("click", () => {
+      releveEnEditionId = null;
+      render();
+    });
+  }
+
+  tabContent.querySelectorAll("[data-edit-releve]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      releveEnEditionId = btn.dataset.editReleve;
+      render();
+    });
   });
 
   tabContent.querySelectorAll("[data-del-releve]").forEach((btn) => {
-    btn.addEventListener("click", () => supprimerReleve(btn.dataset.delReleve));
+    btn.addEventListener("click", () => {
+      if (releveEnEditionId === btn.dataset.delReleve) releveEnEditionId = null;
+      supprimerReleve(btn.dataset.delReleve);
+    });
   });
 }
 
