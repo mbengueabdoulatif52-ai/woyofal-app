@@ -718,7 +718,12 @@ function renderDashboard() {
       </div>
       <div class="card">
         ${statHead("gauge", "Solde compteur")}
-        ${statValue(dernierReleve ? dernierReleve.soldeKwh : "-", dernierReleve ? "kWh" : "")}
+        ${prevision
+          ? `${statValue(Math.round(prevision.soldeEstime * 10) / 10, "kWh")}<p style="font-size:11px;margin:6px 0 0;color:var(--text-muted);">Estime (achats inclus)</p>`
+          : dernierReleve
+            ? `${statValue(dernierReleve.soldeKwh, "kWh")}<p style="font-size:11px;margin:6px 0 0;color:var(--text-muted);">Dernier releve</p>`
+            : statValue("-", "")
+        }
       </div>
     </div>
 
