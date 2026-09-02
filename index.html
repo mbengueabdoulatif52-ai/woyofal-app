@@ -624,7 +624,7 @@ function todayStr() {
 // (jamais pendant la frappe - trop de risques de curseur qui saute).
 // parseMontant retire ces espaces avant de convertir en nombre.
 function parseMontant(str) {
-  return parseFloat(String(str).replace(/[\s\u00A0\u202F]/g, ""));
+  return parseFloat(String(str).replace(/[\s\u00A0\u202F]/g, "").replace(",", "."));
 }
 function formatMontantInput(input) {
   const num = parseMontant(input.value);
@@ -977,6 +977,7 @@ function renderAchats() {
       </div>
       <p style="font-size:12.5px;color:var(--text-muted);margin:0 0 10px;">Le champ kWh se pre-remplit en quittant le champ montant - corrige-le avec le chiffre reel recu par SMS.</p>
       <div id="a-detail" style="margin-bottom:10px;"></div>
+      <p id="a-ecart" style="font-size:12px;color:var(--warning-text);margin:0 0 10px;display:none;line-height:1.5;"></p>
       <p id="a-error" style="font-size:13px;color:var(--danger-text);margin:0 0 10px;display:none;"></p>
       <button type="submit" class="primary">Enregistrer</button>
     </form>
@@ -993,6 +994,10 @@ function renderAchats() {
     }
   `;
 
+  let estimationKwh = null;
+  const aKwhEl = document.getElementById("a-kwh");
+  const aEcartEl = document.getElementById("a-ecart");
+
   document.getElementById("a-montant").addEventListener("blur", () => {
     const montantEl = document.getElementById("a-montant");
     const detailEl = document.getElementById("a-detail");
@@ -1000,7 +1005,9 @@ function renderAchats() {
     if (val > 0) {
       const res = calculerKwh(val, cumul, premierAchat);
       if (!res.erreur) {
-        document.getElementById("a-kwh").value = res.kwh;
+        aKwhEl.value = res.kwh;
+        estimationKwh = res.kwh;
+        aEcartEl.style.display = "none";
         const lignes = [];
         if (res.redevance > 0) lignes.push(["Redevance (1er achat du mois)", res.redevance]);
         if (res.taxeCommunaleMontant > 0) lignes.push(["Taxe communale (2,5%)", res.taxeCommunaleMontant]);
@@ -1020,17 +1027,35 @@ function renderAchats() {
         `;
       } else {
         detailEl.innerHTML = "";
+        estimationKwh = null;
       }
     } else {
       detailEl.innerHTML = "";
+      estimationKwh = null;
     }
     formatMontantInput(montantEl);
+  });
+
+  aKwhEl.addEventListener("input", () => {
+    const saisi = parseMontant(aKwhEl.value);
+    if (estimationKwh === null || !saisi || saisi <= 0) {
+      aEcartEl.style.display = "none";
+      return;
+    }
+    const ecart = Math.abs(saisi - estimationKwh);
+    const ecartRelatif = ecart / estimationKwh;
+    if (ecartRelatif > 0.02 && ecart > 0.3) {
+      aEcartEl.style.display = "block";
+      aEcartEl.textContent = `Ecart de ${ecart.toFixed(1)} kWh (${Math.round(ecartRelatif * 100)}%) avec l'estimation (${estimationKwh} kWh). Si ca se reproduit a chaque achat, verifie ta categorie tarifaire dans Parametres - ou la formule (redevance/taxe/TVA) doit peut-etre etre ajustee pour ta categorie.`;
+    } else {
+      aEcartEl.style.display = "none";
+    }
   });
 
   document.getElementById("achat-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const montant = parseMontant(document.getElementById("a-montant").value);
-    const kwh = parseFloat(document.getElementById("a-kwh").value);
+    const kwh = parseMontant(document.getElementById("a-kwh").value);
     const date = document.getElementById("a-date").value;
     const modePaiement = document.getElementById("a-mode").value;
     const errorEl = document.getElementById("a-error");
@@ -1071,7 +1096,7 @@ function renderReleves() {
 
   document.getElementById("releve-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const soldeKwh = parseFloat(document.getElementById("r-solde").value);
+    const soldeKwh = parseMontant(document.getElementById("r-solde").value);
     const date = document.getElementById("r-date").value;
     const errorEl = document.getElementById("r-error");
     if (isNaN(soldeKwh) || soldeKwh < 0) { errorEl.style.display = "block"; errorEl.textContent = "Entre un solde kWh valide."; return; }
