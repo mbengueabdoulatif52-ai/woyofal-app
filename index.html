@@ -49,6 +49,7 @@
 </style>
 </head>
 <body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <div id="login-screen" class="screen">
   <div class="card" style="max-width:360px;width:100%;text-align:center;">
@@ -81,6 +82,7 @@
     </div>
   </div>
 
+  <div id="alerte-solde"></div>
   <div id="tab-content"></div>
 </div>
 
@@ -141,7 +143,7 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, addDoc, deleteDoc, doc, query, orderBy, onSnapshot, Timestamp, setDoc, updateDoc, getDoc, getDocs
+  getFirestore, collection, addDoc, deleteDoc, doc, query, orderBy, onSnapshot, Timestamp, setDoc, updateDoc, getDoc, getDocs, enableIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ---------------------------------------------------------------
@@ -161,6 +163,19 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 const db = getFirestore(app);
+
+// Persistance hors-ligne : les donnees deja chargees restent consultables
+// sans reseau, et les achats/releves ajoutes hors-ligne se synchronisent
+// automatiquement au retour de la connexion. Echoue silencieusement si
+// plusieurs onglets sont ouverts ou si le navigateur ne le supporte pas -
+// l'appli continue de fonctionner normalement, juste sans ce confort.
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code === "failed-precondition") {
+    console.warn("Persistance hors-ligne desactivee : plusieurs onglets Woyofal ouverts a la fois.");
+  } else if (err.code === "unimplemented") {
+    console.warn("Persistance hors-ligne non supportee par ce navigateur.");
+  }
+});
 
 // ---------------------------------------------------------------
 // 2. MOTEUR TARIFAIRE WOYOFAL (par categorie)
@@ -883,6 +898,152 @@ function fmtDateHeure(d) {
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
+
+const LABELS_MODE_PAIEMENT = {
+  wave: "Wave",
+  orange_money: "Orange Money",
+  carte: "Carte",
+  especes: "Especes",
+};
+
+// ---------------------------------------------------------------
+// EXPORT CSV / PDF
+// ---------------------------------------------------------------
+function nomCompteurActuel() {
+  const c = compteurs.find((c) => c.id === compteurActifId);
+  return c ? c.nom : "Compteur";
+}
+function nomCompteurPourFichier() {
+  return nomCompteurActuel().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "");
+}
+function telechargerFichier(nomFichier, contenu, type) {
+  const blob = new Blob([contenu], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nomFichier;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exporterAchatsCSV() {
+  const lignes = ["Date;Heure;Montant (FCFA);kWh recus;Mode de paiement;Redevance (FCFA);Taxe communale (FCFA);TVA (FCFA)"];
+  achats.forEach((a) => {
+    const d = toDate(a.date);
+    lignes.push([
+      d.toLocaleDateString("fr-FR"),
+      d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+      a.montant,
+      String(a.kwh).replace(".", ","),
+      LABELS_MODE_PAIEMENT[a.modePaiement] || a.modePaiement || "",
+      a.redevance || 0,
+      a.taxeCommunaleMontant || 0,
+      a.tvaMontant || 0,
+    ].join(";"));
+  });
+  telechargerFichier(`woyofal-achats-${nomCompteurPourFichier()}-${todayStr()}.csv`, "\uFEFF" + lignes.join("\r\n"), "text/csv;charset=utf-8;");
+}
+
+function exporterRelevesCSV() {
+  const lignes = ["Date;Heure;Solde kWh restant"];
+  releves.forEach((r) => {
+    const d = toDate(r.date);
+    lignes.push([
+      d.toLocaleDateString("fr-FR"),
+      d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+      String(r.soldeKwh).replace(".", ","),
+    ].join(";"));
+  });
+  telechargerFichier(`woyofal-releves-${nomCompteurPourFichier()}-${todayStr()}.csv`, "\uFEFF" + lignes.join("\r\n"), "text/csv;charset=utf-8;");
+}
+
+function enteteDocPdf(docPdf, sousTitre) {
+  const c = compteurs.find((c) => c.id === compteurActifId);
+  const infosCat = c ? TARIFS_PAR_CATEGORIE[c.categorieTarifaire] : null;
+  const catCourt = infosCat ? infosCat.label.match(/\(([^)]+)\)/)[1] : "";
+  docPdf.setFillColor(27, 58, 82);
+  docPdf.rect(0, 0, 210, 24, "F");
+  docPdf.setTextColor(255, 255, 255);
+  docPdf.setFontSize(15);
+  docPdf.text("Woyofal", 14, 12);
+  docPdf.setFontSize(9);
+  docPdf.text(`${nomCompteurActuel()}${catCourt ? " - " + catCourt : ""}`, 14, 19);
+  docPdf.setFontSize(9);
+  docPdf.text(sousTitre, 196, 12, { align: "right" });
+  docPdf.text(`Exporte le ${new Date().toLocaleDateString("fr-FR")}`, 196, 19, { align: "right" });
+  docPdf.setTextColor(30, 30, 30);
+}
+
+function exporterAchatsPDF() {
+  const docPdf = new window.jspdf.jsPDF();
+  enteteDocPdf(docPdf, "Historique des achats");
+
+  let y = 36;
+  docPdf.setFillColor(27, 58, 82);
+  docPdf.rect(14, y - 5, 182, 8, "F");
+  docPdf.setTextColor(255, 255, 255);
+  docPdf.setFontSize(9);
+  docPdf.text("Date", 16, y);
+  docPdf.text("Montant", 96, y, { align: "right" });
+  docPdf.text("kWh", 130, y, { align: "right" });
+  docPdf.text("Paiement", 155, y);
+  y += 8;
+  docPdf.setTextColor(30, 30, 30);
+
+  let totalMontant = 0, totalKwh = 0;
+  achats.forEach((a, i) => {
+    if (y > 275) { docPdf.addPage(); y = 20; }
+    if (i % 2 === 0) { docPdf.setFillColor(247, 246, 242); docPdf.rect(14, y - 5, 182, 7, "F"); }
+    const d = toDate(a.date);
+    docPdf.text(`${d.toLocaleDateString("fr-FR")} ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`, 16, y);
+    docPdf.text(`${a.montant.toLocaleString("fr-FR")} F`, 96, y, { align: "right" });
+    docPdf.text(`${a.kwh}`, 130, y, { align: "right" });
+    docPdf.text(LABELS_MODE_PAIEMENT[a.modePaiement] || a.modePaiement || "", 155, y);
+    totalMontant += a.montant || 0;
+    totalKwh += a.kwh || 0;
+    y += 7;
+  });
+
+  docPdf.setDrawColor(27, 58, 82);
+  docPdf.line(14, y - 3, 196, y - 3);
+  y += 3;
+  docPdf.setFontSize(10);
+  docPdf.setTextColor(27, 58, 82);
+  docPdf.text("Total", 16, y);
+  docPdf.text(`${totalMontant.toLocaleString("fr-FR")} F`, 96, y, { align: "right" });
+  docPdf.text(`${Math.round(totalKwh * 100) / 100}`, 130, y, { align: "right" });
+
+  docPdf.save(`woyofal-achats-${nomCompteurPourFichier()}-${todayStr()}.pdf`);
+}
+
+function exporterRelevesPDF() {
+  const docPdf = new window.jspdf.jsPDF();
+  enteteDocPdf(docPdf, "Historique des releves");
+
+  let y = 36;
+  docPdf.setFillColor(27, 58, 82);
+  docPdf.rect(14, y - 5, 182, 8, "F");
+  docPdf.setTextColor(255, 255, 255);
+  docPdf.setFontSize(9);
+  docPdf.text("Date", 16, y);
+  docPdf.text("Solde kWh restant", 190, y, { align: "right" });
+  y += 8;
+  docPdf.setTextColor(30, 30, 30);
+
+  releves.forEach((r, i) => {
+    if (y > 275) { docPdf.addPage(); y = 20; }
+    if (i % 2 === 0) { docPdf.setFillColor(247, 246, 242); docPdf.rect(14, y - 5, 182, 7, "F"); }
+    const d = toDate(r.date);
+    docPdf.text(`${d.toLocaleDateString("fr-FR")} ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`, 16, y);
+    docPdf.text(`${r.soldeKwh}`, 190, y, { align: "right" });
+    y += 7;
+  });
+
+  docPdf.save(`woyofal-releves-${nomCompteurPourFichier()}-${todayStr()}.pdf`);
+}
+
 function datetimeLocalStr(date) {
   const pad = (n) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
@@ -908,9 +1069,31 @@ function formatMontantInput(input) {
 // 4. RENDU DES ONGLETS
 // ---------------------------------------------------------------
 function render() {
+  renderAlerteSolde();
   if (currentTab === "dashboard") renderDashboard();
   else if (currentTab === "achats") renderAchats();
   else renderReleves();
+}
+
+const SEUIL_ALERTE_JOURS = 3;
+
+function renderAlerteSolde() {
+  const el = document.getElementById("alerte-solde");
+  if (!el) return;
+  const intervalles = intervallesConsommation(releves, achats);
+  const taux = tauxMoyenJournalier(intervalles);
+  const prevision = joursRestantsEtDate(releves, achats, taux);
+  if (prevision && prevision.joursRestants <= SEUIL_ALERTE_JOURS) {
+    const jours = Math.round(prevision.joursRestants);
+    el.innerHTML = `
+      <div style="background:var(--danger-bg);border-radius:10px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;margin-bottom:20px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--danger-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        <p style="font-size:13px;color:var(--danger-text);margin:0;line-height:1.5;"><strong>Solde presque epuise</strong> - environ ${jours} jour${jours > 1 ? "s" : ""} restant${jours > 1 ? "s" : ""} a ton rythme actuel, a sec vers le ${prevision.dateEstimee.toLocaleDateString("fr-FR")}.</p>
+      </div>
+    `;
+  } else {
+    el.innerHTML = "";
+  }
 }
 
 const PALIER_STYLE = {
@@ -1267,7 +1450,8 @@ function renderAchats() {
         <div>
           ${statHead("coin", "Mode de paiement")}
           <select id="a-mode">
-            <option value="mobile" ${achatEdite && achatEdite.modePaiement === "mobile" ? "selected" : ""}>Mobile money</option>
+            <option value="wave" ${achatEdite && achatEdite.modePaiement === "wave" ? "selected" : ""}>Wave</option>
+            <option value="orange_money" ${achatEdite && achatEdite.modePaiement === "orange_money" ? "selected" : ""}>Orange Money</option>
             <option value="carte" ${achatEdite && achatEdite.modePaiement === "carte" ? "selected" : ""}>Carte</option>
             <option value="especes" ${achatEdite && achatEdite.modePaiement === "especes" ? "selected" : ""}>Especes (+1%)</option>
           </select>
@@ -1286,7 +1470,13 @@ function renderAchats() {
         ${achatEdite ? `<button type="button" id="a-annuler-btn">Annuler</button>` : ""}
       </div>
     </form>
-    <p style="font-size:14px;font-weight:600;margin:0 0 8px;">Historique des achats</p>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <p style="font-size:14px;font-weight:600;margin:0;">Historique des achats</p>
+      <div style="display:flex;gap:8px;">
+        <button type="button" id="export-achats-csv" style="padding:5px 10px;font-size:12px;">CSV</button>
+        <button type="button" id="export-achats-pdf" style="padding:5px 10px;font-size:12px;">PDF</button>
+      </div>
+    </div>
     ${achats.length === 0
       ? `<p style="color:var(--text-secondary);font-size:14px;">Aucun achat enregistre pour le moment.</p>`
       : `<div class="card" style="padding:0;">${achats.map((a) => {
@@ -1394,6 +1584,9 @@ function renderAchats() {
     });
   });
 
+  document.getElementById("export-achats-csv").addEventListener("click", exporterAchatsCSV);
+  document.getElementById("export-achats-pdf").addEventListener("click", exporterAchatsPDF);
+
   if (achatEdite) {
     document.getElementById("a-annuler-btn").addEventListener("click", () => {
       achatEnEditionId = null;
@@ -1439,7 +1632,13 @@ function renderReleves() {
       </div>
     </form>
 
-    <p style="font-size:14px;font-weight:600;margin:0 0 8px;">Historique des releves</p>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <p style="font-size:14px;font-weight:600;margin:0;">Historique des releves</p>
+      <div style="display:flex;gap:8px;">
+        <button type="button" id="export-releves-csv" style="padding:5px 10px;font-size:12px;">CSV</button>
+        <button type="button" id="export-releves-pdf" style="padding:5px 10px;font-size:12px;">PDF</button>
+      </div>
+    </div>
     ${releves.length === 0
       ? `<p style="color:var(--text-secondary);font-size:14px;">Aucun releve enregistre pour le moment.</p>`
       : `<div class="card" style="padding:0;">${releves.map((r) => `
@@ -1493,6 +1692,9 @@ function renderReleves() {
       supprimerReleve(btn.dataset.delReleve);
     });
   });
+
+  document.getElementById("export-releves-csv").addEventListener("click", exporterRelevesCSV);
+  document.getElementById("export-releves-pdf").addEventListener("click", exporterRelevesPDF);
 }
 
 // PWA service worker
