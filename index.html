@@ -479,14 +479,45 @@ function planifierLePlusEconomique(mode, valeur, cumulActuel, premierMoisEstPrem
 // qu'il faut acheter en plus pour ne pas tomber a sec avant la fin du mois
 // calendaire, compte tenu de ce qui est deja sur le compteur. Sans rythme
 // connu, aucune garantie n'est possible - on retombe sur l'optimisation pure.
+const JOURS_MARGE_SECURITE = 5;
+
 function calculerBesoinMois0(rythme) {
   if (!rythme || rythme <= 0) return 0;
   const maintenant = new Date();
-  const finMois = new Date(maintenant.getFullYear(), maintenant.getMonth() + 1, 1);
-  const joursRestants = Math.max(0, joursEntre(maintenant, finMois));
+  // Couvre jusqu'au JOURS_MARGE_SECURITE du mois suivant, pas juste jusqu'au
+  // 30/31 - une marge pour ne pas tomber a sec si la conso reelle depasse
+  // un peu la moyenne sur quelques jours, ou avant d'avoir eu le temps de
+  // faire le prochain achat.
+  const dateCible = new Date(maintenant.getFullYear(), maintenant.getMonth() + 1, 1 + JOURS_MARGE_SECURITE);
+  const joursACouvrir = Math.max(0, joursEntre(maintenant, dateCible));
   const prevision = joursRestantsEtDate(releves, achats, rythme);
   const soldeActuel = prevision ? prevision.soldeEstime : (releves[0] ? releves[0].soldeKwh : 0);
-  return Math.max(0, rythme * joursRestants - soldeActuel);
+  return Math.max(0, rythme * joursACouvrir - soldeActuel);
+}
+
+// Compare "utiliser la capacite restante du mois en cours" contre "sauter
+// entierement ce mois et tout acheter a partir du mois prochain". Les deux
+// peuvent donner le meme total (meme tarif partout) - dans ce cas, on
+// prefere celle qui demande le moins d'achats. Uniquement pertinent quand
+// le mois en cours n'a aucun besoin reel a couvrir (sinon le sauter serait
+// dangereux, pas juste sous-optimal).
+function planifierMeilleureStrategie(mode, valeur, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0) {
+  const optionA = planifierLePlusEconomique(mode, valeur, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0);
+  if (besoinMois0 > 0.01) return optionA;
+
+  const optionB = planifierLePlusEconomique(mode, valeur, 0, true, tarifs, 0);
+  if (optionA.erreur) return optionB.erreur ? optionA : { ...optionB, decalageMois: 1 };
+  if (optionB.erreur) return optionA;
+
+  const bMeilleure = mode === "budget"
+    ? optionB.kwhTotal > optionA.kwhTotal + 0.01
+    : optionB.montantTotal < optionA.montantTotal - 0.5;
+  const egaliteMaisPlusSimple = mode === "budget"
+    ? Math.abs(optionB.kwhTotal - optionA.kwhTotal) <= 0.01 && optionB.detail.length < optionA.detail.length
+    : Math.abs(optionB.montantTotal - optionA.montantTotal) <= 0.5 && optionB.detail.length < optionA.detail.length;
+
+  if (bMeilleure || egaliteMaisPlusSimple) return { ...optionB, decalageMois: 1 };
+  return optionA;
 }
 
 // ---------------------------------------------------------------
@@ -1461,17 +1492,21 @@ function renderDashboard() {
   optConso814El.addEventListener("input", majAffichageRythme);
   optDate814El.addEventListener("change", majAffichageRythme);
 
-  function rendreOptionOptimiseur(titre, badgeAchats, estMeilleure, headline, sousTexte, detail, insuffisant, extra) {
+  function rendreOptionOptimiseur(titre, badgeAchats, estMeilleure, headline, sousTexte, detail, insuffisant, extra, decalageMois) {
+    decalageMois = decalageMois || 0;
     const bg = estMeilleure ? "var(--success-bg)" : "var(--surface)";
     const borderCol = estMeilleure ? "transparent" : "var(--border)";
     const couleur = estMeilleure ? "var(--success-text)" : "var(--text-primary)";
     if (insuffisant) {
       return `<div class="card" style="border-color:var(--border);margin-bottom:10px;padding:14px;"><p style="font-size:13px;color:var(--text-muted);margin:0;">${titre} : montant insuffisant pour couvrir les redevances de ${badgeAchats.toLowerCase()}.</p></div>`;
     }
+    const decalageNote = decalageMois > 0
+      ? `<p style="font-size:11.5px;color:${couleur};margin:0 0 8px;opacity:0.85;">Aucun besoin ce mois-ci - ${detail.length > 1 ? "premier achat" : "achat"} prevu le mois prochain.</p>`
+      : "";
     const detailHtml = detail.length > 1 ? detail.map((d, i) => `
       <div style="background:var(--surface);border-radius:8px;padding:10px 12px;margin-top:8px;">
         <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-primary);margin-bottom:2px;">
-          <span style="font-weight:600;">${i === 0 ? "Achat 1 - maintenant" : "Achat " + (i + 1) + " - mois +" + i}</span>
+          <span style="font-weight:600;">${i === 0 && decalageMois === 0 ? "Achat 1 - maintenant" : "Achat " + (i + 1) + " - mois +" + (i + decalageMois)}</span>
           <span style="font-weight:600;">${d.montant.toLocaleString("fr-FR")} F</span>
         </div>
         <p style="font-size:11.5px;color:var(--text-muted);margin:0;">${d.kwh} kWh</p>
@@ -1489,8 +1524,9 @@ function renderDashboard() {
           <span style="font-size:13px;font-weight:600;color:${couleur};">${titre}</span>
           <span style="font-size:11px;color:${estMeilleure ? couleur : "var(--text-muted)"};">${badgeAchats}</span>
         </div>
-        <p style="font-size:20px;font-weight:700;margin:6px 0 ${sousTexte ? "4px" : "0"};color:${couleur};">${headline}</p>
-        ${sousTexte ? `<p style="font-size:12px;color:${couleur};margin:0;">${sousTexte}</p>` : ""}
+        <p style="font-size:20px;font-weight:700;margin:6px 0 ${sousTexte || decalageNote ? "4px" : "0"};color:${couleur};">${headline}</p>
+        ${sousTexte ? `<p style="font-size:12px;color:${couleur};margin:0 0 4px;">${sousTexte}</p>` : ""}
+        ${decalageNote}
         ${extraHtml}
         ${detailHtml}
       </div>
@@ -1512,7 +1548,7 @@ function renderDashboard() {
     const planifier = optMode === "budget" ? planifierParBudget : planifierParKwh;
     const besoinMois0 = calculerBesoinMois0(tauxEffectif);
     const rapide = appliquerFacteurCorrection(planifier(val, 1, cumul, premier, tarifsActuels), facteur, optMode);
-    const economique = appliquerFacteurCorrection(planifierLePlusEconomique(optMode, val, cumul, premier, tarifsActuels, besoinMois0), facteur, optMode);
+    const economique = appliquerFacteurCorrection(planifierMeilleureStrategie(optMode, val, cumul, premier, tarifsActuels, besoinMois0), facteur, optMode);
     const nbMoisEconomique = economique.erreur ? 1 : economique.detail.length;
 
     function afficherOption(r) {
@@ -1523,7 +1559,8 @@ function renderDashboard() {
       let extra = null;
       if (r.detail.length === 1) {
         const kwhObtenu = optMode === "budget" ? r.kwhTotal : r.detail.reduce((s, d) => s + d.kwh, 0);
-        const cumulApres = Math.round((cumul + kwhObtenu) * 100) / 100;
+        const baseCumul = r.decalageMois ? 0 : cumul;
+        const cumulApres = Math.round((baseCumul + kwhObtenu) * 100) / 100;
         const style0 = PALIER_STYLE[palierActuel(cumulApres)];
         extra = { palierLabel: style0.label, palierText: style0.text, cumulApres };
       }
@@ -1532,7 +1569,7 @@ function renderDashboard() {
 
     let html = "";
 
-    if (nbMoisEconomique <= 1) {
+    if (nbMoisEconomique <= 1 && !economique.decalageMois) {
       const info = afficherOption(rapide);
       html += rendreOptionOptimiseur("Tout maintenant", "1 achat", true, info ? info.headline : "", "Etaler n'apporte rien ici a ce montant", rapide.detail, rapide.erreur, info ? info.extra : null);
     } else {
@@ -1544,14 +1581,22 @@ function renderDashboard() {
       if (!rapide.erreur && !economique.erreur) {
         if (optMode === "budget") {
           const gainKwh = economique.kwhTotal - rapide.kwhTotal;
-          const gainF = Math.round(gainKwh * tarifsActuels.tranches[0].prix);
-          sousTexteEco = `Equivaut a ${gainF.toLocaleString("fr-FR")} F d'electricite en plus, meme budget`;
+          if (gainKwh > 0.5) {
+            const gainF = Math.round(gainKwh * tarifsActuels.tranches[0].prix);
+            sousTexteEco = `Equivaut a ${gainF.toLocaleString("fr-FR")} F d'electricite en plus, meme budget`;
+          } else if (economique.decalageMois) {
+            sousTexteEco = "Meme resultat qu'acheter maintenant, mais en un seul achat";
+          }
         } else {
           const diff = rapide.montantTotal - economique.montantTotal;
-          sousTexteEco = `${diff.toLocaleString("fr-FR")} F de moins que tout maintenant`;
+          if (diff > 0.5) {
+            sousTexteEco = `${diff.toLocaleString("fr-FR")} F de moins que tout maintenant`;
+          } else if (economique.decalageMois) {
+            sousTexteEco = "Meme cout qu'acheter maintenant, mais en un seul achat";
+          }
         }
       }
-      html += rendreOptionOptimiseur("Le plus economique", `${nbMoisEconomique} achats`, true, infoEco ? infoEco.headline : "", sousTexteEco, economique.detail, economique.erreur, infoEco ? infoEco.extra : null);
+      html += rendreOptionOptimiseur("Le plus economique", `${nbMoisEconomique} achat${nbMoisEconomique > 1 ? "s" : ""}`, true, infoEco ? infoEco.headline : "", sousTexteEco, economique.detail, economique.erreur, infoEco ? infoEco.extra : null, economique.decalageMois || 0);
 
       if (nbMoisEconomique > SEUIL_AVERTISSEMENT_MOIS) {
         html += `<div style="background:var(--warning-bg);border-radius:8px;padding:10px 12px;margin-bottom:10px;"><p style="font-size:12px;color:var(--warning-text);margin:0;line-height:1.5;">Ce plan s'etale sur ${nbMoisEconomique} mois - verifie que ca reste raisonnable pour toi avant de t'y engager.</p></div>`;
