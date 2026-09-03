@@ -317,7 +317,8 @@ function kwhRestantAvantProchainPalier(cumulKwh, tarifs) {
 // deux fonctions ci-dessous remplissent les tranches disponibles par
 // prix croissant (les moins cheres d'abord, tous mois confondus).
 // ---------------------------------------------------------------
-function genererSlotsMultiMois(nMois, cumulActuel, tarifs) {
+function genererSlotsMultiMois(nMois, cumulActuel, tarifs, besoinMois0) {
+  besoinMois0 = besoinMois0 || 0;
   const slots = [];
   for (let m = 0; m < nMois; m++) {
     let cum = m === 0 ? cumulActuel : 0;
@@ -331,7 +332,30 @@ function genererSlotsMultiMois(nMois, cumulActuel, tarifs) {
     }
   }
   slots.sort((a, b) => a.prixUnitaire - b.prixUnitaire);
-  return slots;
+
+  if (besoinMois0 <= 0.01) return slots.map((s) => ({ ...s, priorite: 1 }));
+
+  // Le besoin physique reel du mois 0 (solde compteur + rythme) est isole
+  // en priorite absolue, puise dans les tranches les moins cheres DU MOIS 0
+  // (dans l'ordre ou elles apparaissent deja triees par prix) - avant que
+  // le reste ne rivalise normalement avec les autres mois sur le prix seul.
+  let besoinRestant = besoinMois0;
+  const resultat = [];
+  for (const slot of slots) {
+    if (slot.mois === 0 && besoinRestant > 0.01) {
+      const partGarantie = Math.min(slot.capacite, besoinRestant);
+      resultat.push({ mois: 0, capacite: partGarantie, prixUnitaire: slot.prixUnitaire, priorite: 0 });
+      besoinRestant -= partGarantie;
+      const resteCapacite = slot.capacite - partGarantie;
+      if (resteCapacite > 0.01) {
+        resultat.push({ mois: 0, capacite: resteCapacite, prixUnitaire: slot.prixUnitaire, priorite: 1 });
+      }
+    } else {
+      resultat.push({ ...slot, priorite: 1 });
+    }
+  }
+  resultat.sort((a, b) => a.priorite - b.priorite || a.prixUnitaire - b.prixUnitaire);
+  return resultat;
 }
 
 function redevancesParMois(nMois, premierMoisEstPremier, tarifs) {
@@ -346,10 +370,10 @@ function redevancesParMois(nMois, premierMoisEstPremier, tarifs) {
 // prelevee que lorsqu'on achete reellement quelque chose dans ce mois -
 // sinon etaler sur plus de mois serait toujours pire, meme quand ca
 // n'aide pas (redevance payee pour rien).
-function planifierParBudget(budget, nMois, cumulActuel, premierMoisEstPremier, tarifs) {
+function planifierParBudget(budget, nMois, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0) {
   tarifs = tarifs || getTarifsActuels();
   const redevances = redevancesParMois(nMois, premierMoisEstPremier, tarifs);
-  const slots = genererSlotsMultiMois(nMois, cumulActuel, tarifs);
+  const slots = genererSlotsMultiMois(nMois, cumulActuel, tarifs, besoinMois0);
   const detail = Array.from({ length: nMois }, () => ({ montant: 0, kwh: 0 }));
   const redevancePayee = Array(nMois).fill(false);
   let budgetRestant = budget;
@@ -392,10 +416,10 @@ function planifierParBudget(budget, nMois, cumulActuel, premierMoisEstPremier, t
 
 // kWh cible -> minimiser le montant total. Meme principe : un mois qui ne
 // sert a rien n'est jamais ouvert (sa redevance n'est jamais payee).
-function planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, tarifs) {
+function planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0) {
   tarifs = tarifs || getTarifsActuels();
   const redevances = redevancesParMois(nMois, premierMoisEstPremier, tarifs);
-  const slots = genererSlotsMultiMois(nMois, cumulActuel, tarifs);
+  const slots = genererSlotsMultiMois(nMois, cumulActuel, tarifs, besoinMois0);
   const detail = Array.from({ length: nMois }, () => ({ montant: 0, kwh: 0 }));
   const redevancePayee = Array(nMois).fill(false);
   let kwhRestant = kwhCible;
@@ -434,21 +458,35 @@ function planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, ta
 const PLAFOND_SECURITE_MOIS = 24;
 const SEUIL_AVERTISSEMENT_MOIS = 4;
 
-function planifierLePlusEconomique(mode, valeur, cumulActuel, premierMoisEstPremier, tarifs) {
+function planifierLePlusEconomique(mode, valeur, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0) {
   const planifier = mode === "budget" ? planifierParBudget : planifierParKwh;
   const estMeilleur = mode === "budget"
     ? (candidat, actuel) => candidat.kwhTotal > actuel.kwhTotal + 0.01
     : (candidat, actuel) => candidat.montantTotal < actuel.montantTotal - 0.5;
 
-  let meilleur = planifier(valeur, 1, cumulActuel, premierMoisEstPremier, tarifs);
+  let meilleur = planifier(valeur, 1, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0);
   let n = 1;
   while (n < PLAFOND_SECURITE_MOIS) {
-    const candidat = planifier(valeur, n + 1, cumulActuel, premierMoisEstPremier, tarifs);
+    const candidat = planifier(valeur, n + 1, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0);
     if (candidat.erreur || !estMeilleur(candidat, meilleur)) break;
     meilleur = candidat;
     n++;
   }
   return meilleur;
+}
+
+// Besoin physique reel du mois en cours (independant des tranches) : ce
+// qu'il faut acheter en plus pour ne pas tomber a sec avant la fin du mois
+// calendaire, compte tenu de ce qui est deja sur le compteur. Sans rythme
+// connu, aucune garantie n'est possible - on retombe sur l'optimisation pure.
+function calculerBesoinMois0(rythme) {
+  if (!rythme || rythme <= 0) return 0;
+  const maintenant = new Date();
+  const finMois = new Date(maintenant.getFullYear(), maintenant.getMonth() + 1, 1);
+  const joursRestants = Math.max(0, joursEntre(maintenant, finMois));
+  const prevision = joursRestantsEtDate(releves, achats, rythme);
+  const soldeActuel = prevision ? prevision.soldeEstime : (releves[0] ? releves[0].soldeKwh : 0);
+  return Math.max(0, rythme * joursRestants - soldeActuel);
 }
 
 // ---------------------------------------------------------------
@@ -1472,8 +1510,9 @@ function renderDashboard() {
     const facteur = facteurCorrection(achats);
 
     const planifier = optMode === "budget" ? planifierParBudget : planifierParKwh;
+    const besoinMois0 = calculerBesoinMois0(tauxEffectif);
     const rapide = appliquerFacteurCorrection(planifier(val, 1, cumul, premier, tarifsActuels), facteur, optMode);
-    const economique = appliquerFacteurCorrection(planifierLePlusEconomique(optMode, val, cumul, premier, tarifsActuels), facteur, optMode);
+    const economique = appliquerFacteurCorrection(planifierLePlusEconomique(optMode, val, cumul, premier, tarifsActuels, besoinMois0), facteur, optMode);
     const nbMoisEconomique = economique.erreur ? 1 : economique.detail.length;
 
     function afficherOption(r) {
