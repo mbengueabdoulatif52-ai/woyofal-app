@@ -424,6 +424,34 @@ function planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, ta
 }
 
 // ---------------------------------------------------------------
+// "LE PLUS ECONOMIQUE" - nombre de mois trouve automatiquement
+// Grace au remplissage "paresseux" (un mois n'est ouvert, et sa redevance
+// facturee, que s'il sert vraiment), augmenter nMois ne peut jamais degrader
+// le resultat - donc on augmente tant que ca ameliore, et on s'arrete des
+// que ce n'est plus le cas. Pas de plafond fixe cote metier, juste une
+// securite anti-boucle et un seuil d'avertissement pour un plan trop etale.
+// ---------------------------------------------------------------
+const PLAFOND_SECURITE_MOIS = 24;
+const SEUIL_AVERTISSEMENT_MOIS = 4;
+
+function planifierLePlusEconomique(mode, valeur, cumulActuel, premierMoisEstPremier, tarifs) {
+  const planifier = mode === "budget" ? planifierParBudget : planifierParKwh;
+  const estMeilleur = mode === "budget"
+    ? (candidat, actuel) => candidat.kwhTotal > actuel.kwhTotal + 0.01
+    : (candidat, actuel) => candidat.montantTotal < actuel.montantTotal - 0.5;
+
+  let meilleur = planifier(valeur, 1, cumulActuel, premierMoisEstPremier, tarifs);
+  let n = 1;
+  while (n < PLAFOND_SECURITE_MOIS) {
+    const candidat = planifier(valeur, n + 1, cumulActuel, premierMoisEstPremier, tarifs);
+    if (candidat.erreur || !estMeilleur(candidat, meilleur)) break;
+    meilleur = candidat;
+    n++;
+  }
+  return meilleur;
+}
+
+// ---------------------------------------------------------------
 // FACTEUR DE CORRECTION INTERNE (Optimiseur uniquement)
 // Compare, sur l'historique du compteur, le kWh reellement recu (SMS) au
 // kWh theorique que la formule avait estime au moment de l'achat. Le ratio
@@ -1439,62 +1467,57 @@ function renderDashboard() {
     }
     const tarifsActuels = getTarifsActuels();
     const premier = estPremierAchatDuMois(achats);
-    const titres = ["Tout maintenant", "Etale sur 2 mois", "Etale sur 3 mois"];
-    const badges = ["1 achat", "2 achats", "3 achats"];
     const rythmeInfo = calculerTauxEffectif();
     const tauxEffectif = rythmeInfo.taux;
-
-    const resultatsBruts = [1, 2, 3].map((n) =>
-      optMode === "budget"
-        ? planifierParBudget(val, n, cumul, premier, tarifsActuels)
-        : planifierParKwh(val, n, cumul, premier, tarifsActuels)
-    );
     const facteur = facteurCorrection(achats);
-    const resultats = resultatsBruts.map((r) => appliquerFacteurCorrection(r, facteur, optMode));
 
-    let meilleurIndex = 0;
-    resultats.forEach((r, i) => {
-      if (r.erreur) return;
-      if (optMode === "budget") {
-        if (resultats[meilleurIndex].erreur || r.kwhTotal > resultats[meilleurIndex].kwhTotal) meilleurIndex = i;
-      } else {
-        if (resultats[meilleurIndex].erreur || r.montantTotal < resultats[meilleurIndex].montantTotal) meilleurIndex = i;
+    const planifier = optMode === "budget" ? planifierParBudget : planifierParKwh;
+    const rapide = appliquerFacteurCorrection(planifier(val, 1, cumul, premier, tarifsActuels), facteur, optMode);
+    const economique = appliquerFacteurCorrection(planifierLePlusEconomique(optMode, val, cumul, premier, tarifsActuels), facteur, optMode);
+    const nbMoisEconomique = economique.erreur ? 1 : economique.detail.length;
+
+    function afficherOption(r) {
+      if (r.erreur) return null;
+      const headline = optMode === "budget"
+        ? (tauxEffectif ? Math.round(r.kwhTotal / tauxEffectif) + " jours" : r.kwhTotal + " kWh")
+        : r.montantTotal.toLocaleString("fr-FR") + " F";
+      let extra = null;
+      if (r.detail.length === 1) {
+        const kwhObtenu = optMode === "budget" ? r.kwhTotal : r.detail.reduce((s, d) => s + d.kwh, 0);
+        const cumulApres = Math.round((cumul + kwhObtenu) * 100) / 100;
+        const style0 = PALIER_STYLE[palierActuel(cumulApres)];
+        extra = { palierLabel: style0.label, palierText: style0.text, cumulApres };
       }
-    });
+      return { headline, extra };
+    }
 
     let html = "";
-    resultats.forEach((r, i) => {
-      if (r.erreur) {
-        html += rendreOptionOptimiseur(titres[i], badges[i], false, "", "", [], true);
-        return;
-      }
-      let headline, sousTexte = null, extra = null;
-      if (optMode === "budget") {
-        headline = tauxEffectif ? Math.round(r.kwhTotal / tauxEffectif) + " jours" : r.kwhTotal + " kWh";
-        if (i > 0 && !resultats[0].erreur) {
-          const gainKwh = r.kwhTotal - resultats[0].kwhTotal;
-          if (gainKwh > 0.5) {
-            const gainF = Math.round(gainKwh * tarifsActuels.tranches[0].prix);
-            sousTexte = `Equivaut a ${gainF.toLocaleString("fr-FR")} F d'electricite en plus, meme budget`;
-          } else {
-            sousTexte = "Pas mieux que l'option precedente ici";
-          }
-        }
-      } else {
-        headline = r.montantTotal.toLocaleString("fr-FR") + " F";
-        if (i > 0 && !resultats[0].erreur) {
-          const diff = resultats[0].montantTotal - r.montantTotal;
-          sousTexte = diff > 0 ? `${diff.toLocaleString("fr-FR")} F de moins que tout maintenant` : "Pas moins cher que tout maintenant";
+
+    if (nbMoisEconomique <= 1) {
+      const info = afficherOption(rapide);
+      html += rendreOptionOptimiseur("Tout maintenant", "1 achat", true, info ? info.headline : "", "Etaler n'apporte rien ici a ce montant", rapide.detail, rapide.erreur, info ? info.extra : null);
+    } else {
+      const infoRapide = afficherOption(rapide);
+      html += rendreOptionOptimiseur("Le plus rapide", "1 achat", false, infoRapide ? infoRapide.headline : "", null, rapide.detail, rapide.erreur, infoRapide ? infoRapide.extra : null);
+
+      const infoEco = afficherOption(economique);
+      let sousTexteEco = null;
+      if (!rapide.erreur && !economique.erreur) {
+        if (optMode === "budget") {
+          const gainKwh = economique.kwhTotal - rapide.kwhTotal;
+          const gainF = Math.round(gainKwh * tarifsActuels.tranches[0].prix);
+          sousTexteEco = `Equivaut a ${gainF.toLocaleString("fr-FR")} F d'electricite en plus, meme budget`;
+        } else {
+          const diff = rapide.montantTotal - economique.montantTotal;
+          sousTexteEco = `${diff.toLocaleString("fr-FR")} F de moins que tout maintenant`;
         }
       }
-      if (i === 0) {
-        const kwhObtenu = optMode === "budget" ? r.kwhTotal : r.detail.reduce((s, d) => s + d.kwh, 0);
-        const cumulApres0 = Math.round((cumul + kwhObtenu) * 100) / 100;
-        const style0 = PALIER_STYLE[palierActuel(cumulApres0)];
-        extra = { palierLabel: style0.label, palierText: style0.text, cumulApres: cumulApres0 };
+      html += rendreOptionOptimiseur("Le plus economique", `${nbMoisEconomique} achats`, true, infoEco ? infoEco.headline : "", sousTexteEco, economique.detail, economique.erreur, infoEco ? infoEco.extra : null);
+
+      if (nbMoisEconomique > SEUIL_AVERTISSEMENT_MOIS) {
+        html += `<div style="background:var(--warning-bg);border-radius:8px;padding:10px 12px;margin-bottom:10px;"><p style="font-size:12px;color:var(--warning-text);margin:0;line-height:1.5;">Ce plan s'etale sur ${nbMoisEconomique} mois - verifie que ca reste raisonnable pour toi avant de t'y engager.</p></div>`;
       }
-      html += rendreOptionOptimiseur(titres[i], badges[i], i === meilleurIndex, headline, sousTexte, r.detail, false, extra);
-    });
+    }
 
     const previsionEffective = joursRestantsEtDate(releves, achats, tauxEffectif);
     if (previsionEffective) {
