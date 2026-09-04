@@ -1988,7 +1988,7 @@ function renderSimuler() {
   const el = document.getElementById("simuler-content");
   if (!el) return;
   const tarifsActuels = getTarifsActuels();
-  let montantMaxSlider = 40000; // point de depart, s'élargit automatiquement si besoin
+  const montantMaxSlider = 200000; // plafond fixe - toute la courbe/graduations en decoulent
   let dernierCumul = null, dernierPremier = null; // pour ne redessiner la structure que si besoin
 
   const debut = debutMois();
@@ -2108,20 +2108,16 @@ function renderSimuler() {
     let montantFinal, kwhFinal;
     if (depuisKwh) {
       const res = planifierParKwh(Math.max(0, valeur), 1, cumulSimule, premierSimule, tarifsActuels);
-      montantFinal = res.montantTotal;
-      kwhFinal = valeur;
+      montantFinal = Math.min(res.montantTotal, montantMaxSlider);
+      kwhFinal = Math.round(calculerKwh(montantFinal, cumulSimule, premierSimule, tarifsActuels).kwh * 100) / 100;
     } else {
-      montantFinal = Math.max(0, valeur);
+      montantFinal = Math.min(Math.max(0, valeur), montantMaxSlider);
       const res = calculerKwh(montantFinal, cumulSimule, premierSimule, tarifsActuels);
       kwhFinal = res.erreur ? 0 : res.kwh;
     }
-    if (montantFinal > montantMaxSlider * 0.95) {
-      montantMaxSlider = Math.ceil((montantFinal * 1.25) / 5000) * 5000;
-      document.getElementById("sim-slider").max = montantMaxSlider;
-    }
     document.getElementById("sim-montant").value = Math.round(montantFinal).toLocaleString("fr-FR");
     document.getElementById("sim-kwh").value = kwhFinal;
-    document.getElementById("sim-slider").value = Math.min(montantMaxSlider, Math.round(montantFinal / 100) * 100);
+    document.getElementById("sim-slider").value = Math.round(montantFinal / 100) * 100;
 
     if (cumulSimule !== dernierCumul || premierSimule !== dernierPremier) {
       const { maxKwh } = dessinerStructure(cumulSimule, premierSimule);
