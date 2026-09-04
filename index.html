@@ -84,7 +84,7 @@
 
   <div style="display:flex;background:var(--surface);border-radius:10px;padding:3px;margin-bottom:16px;border:1px solid var(--border);">
     <button type="button" id="toggle-simple" style="flex:1;text-align:center;padding:8px;border:none;border-radius:8px;font-size:12.5px;background:none;color:var(--text-muted);">Simple</button>
-    <button type="button" id="toggle-avance" style="flex:1;text-align:center;padding:8px;border:none;border-radius:8px;font-size:12.5px;background:var(--navy);font-weight:600;color:#fff;">Avance</button>
+    <button type="button" id="toggle-avance" style="flex:1;text-align:center;padding:8px;border:none;border-radius:8px;font-size:12.5px;background:var(--navy);font-weight:600;color:#fff;">Avancé</button>
   </div>
 
   <div id="alerte-solde"></div>
@@ -171,14 +171,14 @@ const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 const db = getFirestore(app);
 
-// Persistance hors-ligne : les donnees déjà chargees restent consultables
+// Persistance hors-ligne : les données déjà chargées restent consultables
 // sans reseau, et les achats/releves ajoutes hors-ligne se synchronisent
 // automatiquement au retour de la connexion. Echoue silencieusement si
 // plusieurs onglets sont ouverts ou si le navigateur ne le supporte pas -
 // l'appli continue de fonctionner normalement, juste sans ce confort.
 enableIndexedDbPersistence(db).catch((err) => {
   if (err.code === "failed-precondition") {
-    console.warn("Persistance hors-ligne desactivee : plusieurs onglets Woyofal ouverts a la fois.");
+    console.warn("Persistance hors-ligne désactivée : plusieurs onglets Woyofal ouverts a la fois.");
   } else if (err.code === "unimplemented") {
     console.warn("Persistance hors-ligne non supportee par ce navigateur.");
   }
@@ -414,7 +414,7 @@ function planifierParBudget(budget, nMois, cumulActuel, premierMoisEstPremier, t
     budgetRestant -= montantReelUtilise;
   }
 
-  // Chaque entrée represente un achat Woyofal réel - en dessous de 1000 F ce
+  // Chaque entrée représente un achat Woyofal réel - en dessous de 1000 F ce
   // n'est pas realisable. On exclut ce mois et on relance plutot que de
   // proposer un achat théorique impossible a faire dans la vraie vie.
   const moisSousMinimum = detail.findIndex((d) => d.montant > 0 && d.montant < MONTANT_MIN_ACHAT);
@@ -476,7 +476,7 @@ function planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, ta
 // "LE PLUS ECONOMIQUE" - nombre de mois trouve automatiquement
 // Grace au remplissage "paresseux" (un mois n'est ouvert, et sa redevance
 // facturee, que s'il sert vraiment), augmenter nMois ne peut jamais degrader
-// le résultat - donc on augmente tant que ca ameliore, et on s'arrete des
+// le résultat - donc on augmente tant que ca ameliore, et on s'arrête des
 // que ce n'est plus le cas. Pas de plafond fixe cote metier, juste une
 // sécurité anti-boucle et un seuil d'avertissement pour un plan trop étalé.
 // A résultat économique égal (a 0.01 pres), on depage par : moins de mois
@@ -950,7 +950,7 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
-// Deplace les anciennes donnees "a plat" (users/{uid}/achats, /releves) vers
+// Deplace les anciennes données "a plat" (users/{uid}/achats, /releves) vers
 // un premier compteur "Compteur 1", si ce n'est pas déjà fait. Ne s'execute
 // qu'une fois par compte (ne fait rien si des compteurs existent déjà).
 async function migrerVersMultiCompteurs(uid) {
@@ -1463,7 +1463,7 @@ function renderDashboard() {
     <div class="card" style="margin-bottom:20px;">
       <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Prévisions</p>
       ${releves.length < 2
-        ? `<p style="font-size:13px;color:var(--text-secondary);margin:0;">Ajoute au moins 2 releves espaces dans le temps (onglet Releves) pour activer les prévisions.</p>`
+        ? `<p style="font-size:13px;color:var(--text-secondary);margin:0;">Ajoute au moins 2 releves espacés dans le temps (onglet Releves) pour activer les prévisions.</p>`
         : `
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;margin-bottom:16px;">
             <div style="padding:0 12px 0 0;border-right:1px solid var(--border);">
@@ -1602,7 +1602,7 @@ function renderDashboard() {
     const extraHtml = extra ? `
       <div style="margin-top:10px;">
         <span style="display:inline-block;background:var(--surface);color:${extra.palierText};font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;">${extra.palierLabel}</span>
-        <p style="font-size:12px;color:${couleur};margin:6px 0 0;">Cumul apres achat : <strong>${extra.cumulApres} kWh</strong></p>
+        <p style="font-size:12px;color:${couleur};margin:6px 0 0;">Cumul après achat : <strong>${extra.cumulApres} kWh</strong></p>
       </div>
     ` : "";
     return `
@@ -1981,14 +1981,14 @@ function renderReleves() {
 
 // ---------------------------------------------------------------
 // 5. MODE SIMPLE - calculatrice montant <-> kWh, independante des
-// donnees de suivi. Reste sur la catégorie du compteur actif (par
+// données de suivi. Reste sur la catégorie du compteur actif (par
 // defaut DPP) plutot que d'ajouter un choix de catégorie ici.
 // ---------------------------------------------------------------
 function renderSimuler() {
   const el = document.getElementById("simuler-content");
   if (!el) return;
   const tarifsActuels = getTarifsActuels();
-  let montantMaxSlider = 40000; // point de depart, s'elargit automatiquement si besoin
+  let montantMaxSlider = 40000; // point de depart, s'élargit automatiquement si besoin
 
   const debut = debutMois();
   const totalMontantMois = achats.filter((a) => toDate(a.date) >= debut).reduce((s, a) => s + (a.montant || 0), 0);
@@ -2067,7 +2067,7 @@ function renderSimuler() {
       const res = calculerKwh(montantFinal, cumulSimule, premierSimule, tarifsActuels);
       kwhFinal = res.erreur ? 0 : res.kwh;
     }
-    // Le curseur s'elargit automatiquement plutot que de plafonner sur une
+    // Le curseur s'élargit automatiquement plutot que de plafonner sur une
     // valeur fixe arbitraire - toujours un peu de marge au-dela du point actuel.
     if (montantFinal > montantMaxSlider * 0.95) {
       montantMaxSlider = Math.ceil((montantFinal * 1.25) / 5000) * 5000;
