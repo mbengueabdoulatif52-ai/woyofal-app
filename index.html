@@ -82,9 +82,15 @@
     </div>
   </div>
 
+  <div style="display:flex;background:var(--surface);border-radius:10px;padding:3px;margin-bottom:16px;border:1px solid var(--border);">
+    <button type="button" id="toggle-simple" style="flex:1;text-align:center;padding:8px;border:none;border-radius:8px;font-size:12.5px;background:none;color:var(--text-muted);">Simple</button>
+    <button type="button" id="toggle-avance" style="flex:1;text-align:center;padding:8px;border:none;border-radius:8px;font-size:12.5px;background:var(--navy);font-weight:600;color:#fff;">Avance</button>
+  </div>
+
   <div id="alerte-solde"></div>
   <div id="rappel-releve"></div>
   <div id="tab-content"></div>
+  <div id="simuler-content" style="display:none;"></div>
 </div>
 
 <div id="compteurs-modal" style="display:none;position:fixed;inset:0;background:rgba(34,40,45,0.45);z-index:50;align-items:center;justify-content:center;padding:20px;">
@@ -698,6 +704,7 @@ let achatEnEditionId = null;
 let releveEnEditionId = null;
 let compteurs = [];
 let compteurActifId = null;
+let modeAffichage = "avance";
 let unsubAchats = null;
 let unsubReleves = null;
 let unsubCompteurs = null;
@@ -764,6 +771,17 @@ function ouvrirCompteursModal() {
   compteursModal.style.display = "flex";
 }
 document.getElementById("compteurs-btn").addEventListener("click", ouvrirCompteursModal);
+
+async function basculerMode(nouveauMode) {
+  if (nouveauMode === modeAffichage) return;
+  modeAffichage = nouveauMode;
+  appliquerModeAffichage();
+  if (currentUser) {
+    await setDoc(doc(db, "users", currentUser.uid), { modeAffichage: nouveauMode }, { merge: true });
+  }
+}
+document.getElementById("toggle-simple").addEventListener("click", () => basculerMode("simple"));
+document.getElementById("toggle-avance").addEventListener("click", () => basculerMode("avance"));
 document.getElementById("compteur-actif-label").addEventListener("click", ouvrirCompteursModal);
 document.getElementById("compteurs-close").addEventListener("click", () => {
   compteursModalOuvert = false;
@@ -913,9 +931,11 @@ onAuthStateChanged(auth, async (user) => {
     const idsExistants = compteursSnap.docs.map((d) => d.id);
     const idEnregistre = userSnap.exists() ? userSnap.data().compteurActifId : null;
     compteurActifId = idsExistants.includes(idEnregistre) ? idEnregistre : idsExistants[0];
+    modeAffichage = (userSnap.exists() && userSnap.data().modeAffichage === "simple") ? "simple" : "avance";
 
     mettreAJourCategorieActuelle();
     mettreAJourLabelCompteurActif();
+    appliquerModeAffichage();
     if (compteurActifId) activerListenersCompteur(user.uid, compteurActifId);
   } else {
     mainScreen.classList.remove("visible");
@@ -925,7 +945,7 @@ onAuthStateChanged(auth, async (user) => {
     if (unsubAchats) unsubAchats();
     if (unsubReleves) unsubReleves();
     if (unsubCompteurs) unsubCompteurs();
-    achats = []; releves = []; compteurs = []; compteurActifId = null; categorieTarifaire = "DPP";
+    achats = []; releves = []; compteurs = []; compteurActifId = null; categorieTarifaire = "DPP"; modeAffichage = "avance";
     achatEnEditionId = null; releveEnEditionId = null;
   }
 });
@@ -1241,11 +1261,31 @@ function formatMontantInput(input) {
 // 4. RENDU DES ONGLETS
 // ---------------------------------------------------------------
 function render() {
+  if (modeAffichage === "simple") return;
   renderAlerteSolde();
   renderRappelReleve();
   if (currentTab === "dashboard") renderDashboard();
   else if (currentTab === "achats") renderAchats();
   else renderReleves();
+}
+
+function appliquerModeAffichage() {
+  const estSimple = modeAffichage === "simple";
+  document.getElementById("toggle-simple").style.background = estSimple ? "var(--navy)" : "none";
+  document.getElementById("toggle-simple").style.color = estSimple ? "#fff" : "var(--text-muted)";
+  document.getElementById("toggle-simple").style.fontWeight = estSimple ? "600" : "400";
+  document.getElementById("toggle-avance").style.background = estSimple ? "none" : "var(--navy)";
+  document.getElementById("toggle-avance").style.color = estSimple ? "var(--text-muted)" : "#fff";
+  document.getElementById("toggle-avance").style.fontWeight = estSimple ? "400" : "600";
+
+  document.getElementById("simuler-content").style.display = estSimple ? "block" : "none";
+  document.getElementById("alerte-solde").style.display = estSimple ? "none" : "block";
+  document.getElementById("rappel-releve").style.display = estSimple ? "none" : "block";
+  document.getElementById("tab-content").style.display = estSimple ? "none" : "block";
+  bottomNav.style.display = estSimple ? "none" : "flex";
+
+  if (estSimple) renderSimuler();
+  else render();
 }
 
 const SEUIL_ALERTE_JOURS = 3;
@@ -1937,6 +1977,116 @@ function renderReleves() {
 
   document.getElementById("export-releves-csv").addEventListener("click", exporterRelevesCSV);
   document.getElementById("export-releves-pdf").addEventListener("click", exporterRelevesPDF);
+}
+
+// ---------------------------------------------------------------
+// 5. MODE SIMPLE - calculatrice montant <-> kWh, independante des
+// donnees de suivi. Reste sur la categorie du compteur actif (par
+// defaut DPP) plutot que d'ajouter un choix de categorie ici.
+// ---------------------------------------------------------------
+function renderSimuler() {
+  const el = document.getElementById("simuler-content");
+  if (!el) return;
+  const tarifsActuels = getTarifsActuels();
+  const MONTANT_MAX_SLIDER = 40000;
+
+  const debut = debutMois();
+  const totalMontantMois = achats.filter((a) => toDate(a.date) >= debut).reduce((s, a) => s + (a.montant || 0), 0);
+
+  el.innerHTML = `
+    <div class="card">
+      <p style="font-size:14px;font-weight:600;margin:0 0 4px;">Combien de kWh vais-je obtenir ?</p>
+      <p style="font-size:11px;color:var(--text-muted);margin:0 0 14px;">Categorie ${tarifsActuels.label}</p>
+      <p style="font-size:12px;color:var(--text-secondary);margin:0 0 4px;">Montant deja achete ce mois-ci</p>
+      <input type="text" inputmode="decimal" id="sim-montant-prealable" value="${totalMontantMois || ""}" placeholder="0" style="margin-bottom:16px;" />
+      <div style="position:relative;height:170px;margin-bottom:10px;">
+        <svg id="sim-courbe" viewBox="0 0 300 170" style="width:100%;height:100%;"></svg>
+      </div>
+      <input type="range" id="sim-slider" min="0" max="${MONTANT_MAX_SLIDER}" step="100" value="10000" style="width:100%;accent-color:var(--orange);margin-bottom:16px;" />
+      <div style="display:flex;gap:12px;">
+        <div style="flex:1;">
+          <p style="font-size:9px;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-muted);margin:0 0 4px;font-weight:600;">Montant (F)</p>
+          <input type="text" inputmode="decimal" id="sim-montant" style="font-size:15px;font-weight:600;" />
+        </div>
+        <div style="flex:1;">
+          <p style="font-size:9px;letter-spacing:0.05em;text-transform:uppercase;color:var(--success-text);margin:0 0 4px;font-weight:600;">kWh obtenus</p>
+          <input type="text" inputmode="decimal" id="sim-kwh" style="font-size:15px;font-weight:600;color:var(--success-text);border-color:var(--success-text);" />
+        </div>
+      </div>
+    </div>
+  `;
+
+  function etatSimulation() {
+    const montantPrealable = parseMontant(document.getElementById("sim-montant-prealable").value) || 0;
+    if (montantPrealable <= 0) return { cumulSimule: 0, premierSimule: true };
+    const resPrealable = calculerKwh(montantPrealable, 0, true, tarifsActuels);
+    return { cumulSimule: resPrealable.erreur ? 0 : resPrealable.kwh, premierSimule: false };
+  }
+
+  function dessinerCourbe(cumulSimule, premierSimule, montantActuel) {
+    const svg = document.getElementById("sim-courbe");
+    const points = [];
+    const pas = MONTANT_MAX_SLIDER / 40;
+    let maxKwh = 0.001;
+    for (let m = 0; m <= MONTANT_MAX_SLIDER; m += pas) {
+      const res = calculerKwh(m, cumulSimule, premierSimule, tarifsActuels);
+      const kwh = res.erreur ? 0 : res.kwh;
+      points.push({ m, kwh });
+      if (kwh > maxKwh) maxKwh = kwh;
+    }
+    const padL = 22, padB = 20, w = 300, h = 170;
+    const plotW = w - padL - 10, plotH = h - padB - 10;
+    const toX = (m) => padL + (m / MONTANT_MAX_SLIDER) * plotW;
+    const toY = (kwh) => (h - padB) - (kwh / maxKwh) * plotH;
+    const chemin = points.map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.m).toFixed(1)},${toY(p.kwh).toFixed(1)}`).join(" ");
+
+    const resActuel = calculerKwh(montantActuel, cumulSimule, premierSimule, tarifsActuels);
+    const kwhActuel = resActuel.erreur ? 0 : resActuel.kwh;
+    const px = toX(Math.min(montantActuel, MONTANT_MAX_SLIDER)).toFixed(1);
+    const py = toY(kwhActuel).toFixed(1);
+
+    svg.innerHTML = `
+      <line x1="${padL}" y1="8" x2="${padL}" y2="${h - padB}" stroke="var(--border)" />
+      <line x1="${padL}" y1="${h - padB}" x2="${w - 8}" y2="${h - padB}" stroke="var(--border)" />
+      <path d="${chemin}" fill="none" stroke="var(--navy)" stroke-width="2.5" />
+      <line x1="${px}" y1="${h - padB}" x2="${px}" y2="${py}" stroke="var(--orange)" stroke-width="1" stroke-dasharray="3,3" />
+      <line x1="${padL}" y1="${py}" x2="${px}" y2="${py}" stroke="var(--orange)" stroke-width="1" stroke-dasharray="3,3" />
+      <circle cx="${px}" cy="${py}" r="6" fill="var(--orange)" stroke="var(--surface)" stroke-width="2" />
+    `;
+  }
+
+  function majAffichage(valeur, depuisKwh) {
+    const { cumulSimule, premierSimule } = etatSimulation();
+    let montantFinal, kwhFinal;
+    if (depuisKwh) {
+      const res = planifierParKwh(Math.max(0, valeur), 1, cumulSimule, premierSimule, tarifsActuels);
+      montantFinal = res.montantTotal;
+      kwhFinal = valeur;
+    } else {
+      montantFinal = Math.max(0, valeur);
+      const res = calculerKwh(montantFinal, cumulSimule, premierSimule, tarifsActuels);
+      kwhFinal = res.erreur ? 0 : res.kwh;
+    }
+    document.getElementById("sim-montant").value = Math.round(montantFinal).toLocaleString("fr-FR");
+    document.getElementById("sim-kwh").value = kwhFinal;
+    document.getElementById("sim-slider").value = Math.min(MONTANT_MAX_SLIDER, Math.round(montantFinal / 100) * 100);
+    dessinerCourbe(cumulSimule, premierSimule, montantFinal);
+  }
+
+  document.getElementById("sim-montant-prealable").addEventListener("input", () => {
+    majAffichage(parseFloat(document.getElementById("sim-slider").value) || 10000, false);
+  });
+  document.getElementById("sim-slider").addEventListener("input", (e) => {
+    majAffichage(parseFloat(e.target.value), false);
+  });
+  document.getElementById("sim-montant").addEventListener("change", () => {
+    majAffichage(parseMontant(document.getElementById("sim-montant").value) || 0, false);
+  });
+  document.getElementById("sim-kwh").addEventListener("change", () => {
+    majAffichage(parseMontant(document.getElementById("sim-kwh").value) || 0, true);
+  });
+
+  majAffichage(10000, false);
 }
 
 // PWA service worker
