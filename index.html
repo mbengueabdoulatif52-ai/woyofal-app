@@ -1368,6 +1368,27 @@ function renderDashboard() {
   const prevision = joursRestantsEtDate(releves, achats, taux);
   const aAnomalie = intervalles.some((i) => i.anomalie);
 
+  const besoinPrevu = calculerBesoinMois0(taux);
+  let coutEstimeHtml = "";
+  if (taux !== null) {
+    if (besoinPrevu > 0.5) {
+      const calcCout = planifierParKwh(besoinPrevu, 1, cumul, estPremierAchatDuMois(achats), getTarifsActuels());
+      coutEstimeHtml = `
+        <div style="background:var(--warning-bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;">
+          ${statHead("wallet", "Cout estime", "var(--warning-text)")}
+          <p style="margin:0 0 3px;"><span style="font-size:19px;font-weight:700;color:var(--warning-text);">~${calcCout.montantTotal.toLocaleString("fr-FR")} F</span></p>
+          <p style="font-size:11.5px;color:var(--warning-text);margin:0;">Pour tenir jusqu'au ${dateLimiteMois0().toLocaleDateString("fr-FR")} (${Math.round(besoinPrevu * 10) / 10} kWh), a ton rythme actuel</p>
+        </div>
+      `;
+    } else {
+      coutEstimeHtml = `
+        <div style="background:var(--success-bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;">
+          <p style="font-size:12.5px;color:var(--success-text);margin:0;">Pas d'achat necessaire pour l'instant - ton solde couvre deja tes besoins jusqu'au ${dateLimiteMois0().toLocaleDateString("fr-FR")}.</p>
+        </div>
+      `;
+    }
+  }
+
   const t1max = getTarifsActuels().tranches[0].max;
   const t2max = getTarifsActuels().tranches[1].max;
   const jaugeMax = t2max + 60;
@@ -1427,6 +1448,7 @@ function renderDashboard() {
               ${statValue(prevision ? prevision.dateEstimee.toLocaleDateString("fr-FR") : "-", "", prevision ? "var(--danger-text)" : undefined)}
             </div>
           </div>
+          ${coutEstimeHtml}
           <div style="height:1px;background:var(--border);margin:0 0 14px;"></div>
           ${statHead("chart", "Conso par periode (kWh/j)")}
           ${graphiqueConsommationSVG(intervalles)}
