@@ -370,10 +370,13 @@ function redevancesParMois(nMois, premierMoisEstPremier, tarifs) {
 // prelevee que lorsqu'on achete reellement quelque chose dans ce mois -
 // sinon etaler sur plus de mois serait toujours pire, meme quand ca
 // n'aide pas (redevance payee pour rien).
-function planifierParBudget(budget, nMois, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0) {
+const MONTANT_MIN_ACHAT = 1000; // Woyofal vendu a partir de 1000 F (grille officielle Senelec)
+
+function planifierParBudget(budget, nMois, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0, moisExclus) {
   tarifs = tarifs || getTarifsActuels();
+  moisExclus = moisExclus || [];
   const redevances = redevancesParMois(nMois, premierMoisEstPremier, tarifs);
-  const slots = genererSlotsMultiMois(nMois, cumulActuel, tarifs, besoinMois0);
+  const slots = genererSlotsMultiMois(nMois, cumulActuel, tarifs, besoinMois0).filter((s) => !moisExclus.includes(s.mois));
   const detail = Array.from({ length: nMois }, () => ({ montant: 0, kwh: 0 }));
   const redevancePayee = Array(nMois).fill(false);
   let budgetRestant = budget;
@@ -405,21 +408,31 @@ function planifierParBudget(budget, nMois, cumulActuel, premierMoisEstPremier, t
     budgetRestant -= montantReelUtilise;
   }
 
+  // Chaque entree represente un achat Woyofal reel - en dessous de 1000 F ce
+  // n'est pas realisable. On exclut ce mois et on relance plutot que de
+  // proposer un achat theorique impossible a faire dans la vraie vie.
+  const moisSousMinimum = detail.findIndex((d) => d.montant > 0 && d.montant < MONTANT_MIN_ACHAT);
+  if (moisSousMinimum !== -1 && moisExclus.length < nMois) {
+    return planifierParBudget(budget, nMois, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0, [...moisExclus, moisSousMinimum]);
+  }
+
   const detailFinal = detail.filter((d) => d.montant > 0).map((d) => ({
     montant: Math.round(d.montant), kwh: Math.round(d.kwh * 100) / 100,
   }));
   const redevanceTotale = redevances.reduce((a, b, i) => a + (redevancePayee[i] ? b : 0), 0);
+  const manqueMois0 = Math.round(Math.max(0, (besoinMois0 || 0) - detail[0].kwh) * 100) / 100;
 
   if (kwhTotal <= 0) return { erreur: "budget_insuffisant_redevances", redevanceTotale };
-  return { kwhTotal: Math.round(kwhTotal * 100) / 100, redevanceTotale, detail: detailFinal, erreur: null };
+  return { kwhTotal: Math.round(kwhTotal * 100) / 100, redevanceTotale, detail: detailFinal, erreur: null, manqueMois0, nbMoisOuverts: detailFinal.length };
 }
 
 // kWh cible -> minimiser le montant total. Meme principe : un mois qui ne
 // sert a rien n'est jamais ouvert (sa redevance n'est jamais payee).
-function planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0) {
+function planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0, moisExclus) {
   tarifs = tarifs || getTarifsActuels();
+  moisExclus = moisExclus || [];
   const redevances = redevancesParMois(nMois, premierMoisEstPremier, tarifs);
-  const slots = genererSlotsMultiMois(nMois, cumulActuel, tarifs, besoinMois0);
+  const slots = genererSlotsMultiMois(nMois, cumulActuel, tarifs, besoinMois0).filter((s) => !moisExclus.includes(s.mois));
   const detail = Array.from({ length: nMois }, () => ({ montant: 0, kwh: 0 }));
   const redevancePayee = Array(nMois).fill(false);
   let kwhRestant = kwhCible;
@@ -438,13 +451,19 @@ function planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, ta
     kwhRestant -= kwhPris;
   }
 
+  const moisSousMinimum = detail.findIndex((d) => d.montant > 0 && d.montant < MONTANT_MIN_ACHAT);
+  if (moisSousMinimum !== -1 && moisExclus.length < nMois) {
+    return planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0, [...moisExclus, moisSousMinimum]);
+  }
+
   const detailFinal = detail.filter((d) => d.montant > 0).map((d) => ({
     montant: Math.round(d.montant), kwh: Math.round(d.kwh * 100) / 100,
   }));
   const redevanceTotale = redevances.reduce((a, b, i) => a + (redevancePayee[i] ? b : 0), 0);
   const montantTotal = detailFinal.reduce((s, d) => s + d.montant, 0);
+  const manqueMois0 = Math.round(Math.max(0, (besoinMois0 || 0) - detail[0].kwh) * 100) / 100;
 
-  return { montantTotal, redevanceTotale, detail: detailFinal, erreur: null };
+  return { montantTotal, redevanceTotale, detail: detailFinal, erreur: null, manqueMois0, nbMoisOuverts: detailFinal.length };
 }
 
 // ---------------------------------------------------------------
@@ -454,22 +473,29 @@ function planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, ta
 // le resultat - donc on augmente tant que ca ameliore, et on s'arrete des
 // que ce n'est plus le cas. Pas de plafond fixe cote metier, juste une
 // securite anti-boucle et un seuil d'avertissement pour un plan trop etale.
+// A resultat economique egal (a 0.01 pres), on depage par : moins de mois
+// ouverts, puis moins d'achats - hierarchie validee par revue croisee.
 // ---------------------------------------------------------------
 const PLAFOND_SECURITE_MOIS = 24;
 const SEUIL_AVERTISSEMENT_MOIS = 4;
 
 function planifierLePlusEconomique(mode, valeur, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0) {
   const planifier = mode === "budget" ? planifierParBudget : planifierParKwh;
-  const estMeilleur = mode === "budget"
-    ? (candidat, actuel) => candidat.kwhTotal > actuel.kwhTotal + 0.01
-    : (candidat, actuel) => candidat.montantTotal < actuel.montantTotal - 0.5;
+  const scoreEco = (r) => (mode === "budget" ? r.kwhTotal : -r.montantTotal);
 
   let meilleur = planifier(valeur, 1, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0);
   let n = 1;
   while (n < PLAFOND_SECURITE_MOIS) {
     const candidat = planifier(valeur, n + 1, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0);
-    if (candidat.erreur || !estMeilleur(candidat, meilleur)) break;
-    meilleur = candidat;
+    if (candidat.erreur) break;
+    const diff = scoreEco(candidat) - scoreEco(meilleur);
+    if (diff > 0.01) {
+      meilleur = candidat;
+    } else if (Math.abs(diff) <= 0.01 && candidat.nbMoisOuverts < meilleur.nbMoisOuverts) {
+      meilleur = candidat; // egalite economique, mais moins de mois ouverts
+    } else {
+      break;
+    }
     n++;
   }
   return meilleur;
@@ -481,6 +507,11 @@ function planifierLePlusEconomique(mode, valeur, cumulActuel, premierMoisEstPrem
 // connu, aucune garantie n'est possible - on retombe sur l'optimisation pure.
 const JOURS_MARGE_SECURITE = 5;
 
+function dateLimiteMois0() {
+  const maintenant = new Date();
+  return new Date(maintenant.getFullYear(), maintenant.getMonth() + 1, 1 + JOURS_MARGE_SECURITE);
+}
+
 function calculerBesoinMois0(rythme) {
   if (!rythme || rythme <= 0) return 0;
   const maintenant = new Date();
@@ -488,7 +519,7 @@ function calculerBesoinMois0(rythme) {
   // 30/31 - une marge pour ne pas tomber a sec si la conso reelle depasse
   // un peu la moyenne sur quelques jours, ou avant d'avoir eu le temps de
   // faire le prochain achat.
-  const dateCible = new Date(maintenant.getFullYear(), maintenant.getMonth() + 1, 1 + JOURS_MARGE_SECURITE);
+  const dateCible = dateLimiteMois0();
   const joursACouvrir = Math.max(0, joursEntre(maintenant, dateCible));
   const prevision = joursRestantsEtDate(releves, achats, rythme);
   const soldeActuel = prevision ? prevision.soldeEstime : (releves[0] ? releves[0].soldeKwh : 0);
@@ -543,10 +574,13 @@ function facteurCorrection(achatsListe) {
 function appliquerFacteurCorrection(resultat, facteur, mode) {
   if (!facteur || resultat.erreur) return resultat;
   if (mode === "budget") {
+    const besoinImplicite = (resultat.manqueMois0 || 0) + (resultat.detail[0] ? resultat.detail[0].kwh : 0);
+    const detailCorrige = resultat.detail.map((d) => ({ ...d, kwh: Math.round(d.kwh * facteur * 100) / 100 }));
     return {
       ...resultat,
       kwhTotal: Math.round(resultat.kwhTotal * facteur * 100) / 100,
-      detail: resultat.detail.map((d) => ({ ...d, kwh: Math.round(d.kwh * facteur * 100) / 100 })),
+      detail: detailCorrige,
+      manqueMois0: Math.round(Math.max(0, besoinImplicite - (detailCorrige[0] ? detailCorrige[0].kwh : 0)) * 100) / 100,
     };
   }
   return {
@@ -1547,7 +1581,7 @@ function renderDashboard() {
 
     const planifier = optMode === "budget" ? planifierParBudget : planifierParKwh;
     const besoinMois0 = calculerBesoinMois0(tauxEffectif);
-    const rapide = appliquerFacteurCorrection(planifier(val, 1, cumul, premier, tarifsActuels), facteur, optMode);
+    const rapide = appliquerFacteurCorrection(planifier(val, 1, cumul, premier, tarifsActuels, besoinMois0), facteur, optMode);
     const economique = appliquerFacteurCorrection(planifierMeilleureStrategie(optMode, val, cumul, premier, tarifsActuels, besoinMois0), facteur, optMode);
     const nbMoisEconomique = economique.erreur ? 1 : economique.detail.length;
 
@@ -1606,6 +1640,14 @@ function renderDashboard() {
     const previsionEffective = joursRestantsEtDate(releves, achats, tauxEffectif);
     if (previsionEffective) {
       html += `<div style="background:var(--warning-bg);border-radius:8px;padding:10px 12px;"><p style="font-size:12px;color:var(--warning-text);margin:0;line-height:1.5;">A ce rythme, ton solde compteur tient environ ${Math.round(previsionEffective.joursRestants)} jours - verifie que ca suffise avant le prochain achat prevu pour les options etalees.</p></div>`;
+    }
+
+    if (besoinMois0 > 0.01) {
+      html += `<p style="font-size:11.5px;color:var(--text-muted);margin:8px 0 0;">Le besoin de ce mois est calcule pour tenir jusqu'au ${dateLimiteMois0().toLocaleDateString("fr-FR")}.</p>`;
+    }
+    const manqueDetecte = Math.max(rapide.manqueMois0 || 0, economique.manqueMois0 || 0);
+    if (manqueDetecte > 0.5) {
+      html += `<div style="background:var(--danger-bg);border-radius:8px;padding:10px 12px;margin-top:8px;"><p style="font-size:12px;color:var(--danger-text);margin:0;line-height:1.5;"><strong>Ce montant ne couvre pas ton besoin reel du mois</strong> - il manquerait environ ${manqueDetecte} kWh par rapport a ce qu'il te faut pour tenir jusqu'au ${dateLimiteMois0().toLocaleDateString("fr-FR")}.</p></div>`;
     }
 
     optResultEl.innerHTML = html;
