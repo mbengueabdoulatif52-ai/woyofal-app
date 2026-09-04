@@ -1357,11 +1357,6 @@ function renderDashboard() {
   const palier = palierActuel(cumul);
   const restant = kwhRestantAvantProchainPalier(cumul);
   const dernierReleve = releves[0];
-  const debut = debutMois();
-  const achatsDuMois = achats.filter((a) => toDate(a.date) >= debut);
-  const totalMontant = achatsDuMois.reduce((s, a) => s + (a.montant || 0), 0);
-  const totalKwh = achatsDuMois.reduce((s, a) => s + (a.kwh || 0), 0);
-  const coutMoyen = totalKwh > 0 ? (totalMontant / totalKwh).toFixed(0) : null;
 
   const intervalles = intervallesConsommation(releves, achats);
   const taux = tauxMoyenJournalier(intervalles);
@@ -1401,10 +1396,6 @@ function renderDashboard() {
         ${statHead("wallet", "kWh achetes ce mois", style.text)}
         ${statValue(cumul.toFixed(1), "kWh", style.text)}
         <p style="font-size:11px;margin:6px 0 0;color:${style.text};">${style.label}</p>
-      </div>
-      <div class="card">
-        ${statHead("coin", "Cout moyen / kWh")}
-        ${statValue(coutMoyen ? coutMoyen : "-", coutMoyen ? "F" : "")}
       </div>
       <div class="card">
         ${statHead("gauge", "Solde compteur")}
