@@ -1988,7 +1988,7 @@ function renderSimuler() {
   const el = document.getElementById("simuler-content");
   if (!el) return;
   const tarifsActuels = getTarifsActuels();
-  const MONTANT_MAX_SLIDER = 40000;
+  let montantMaxSlider = 40000; // point de depart, s'elargit automatiquement si besoin
 
   const debut = debutMois();
   const totalMontantMois = achats.filter((a) => toDate(a.date) >= debut).reduce((s, a) => s + (a.montant || 0), 0);
@@ -1999,11 +1999,7 @@ function renderSimuler() {
       <p style="font-size:11px;color:var(--text-muted);margin:0 0 14px;">Categorie ${tarifsActuels.label}</p>
       <p style="font-size:12px;color:var(--text-secondary);margin:0 0 4px;">Montant deja achete ce mois-ci</p>
       <input type="text" inputmode="decimal" id="sim-montant-prealable" value="${totalMontantMois || ""}" placeholder="0" style="margin-bottom:16px;" />
-      <div style="position:relative;height:170px;margin-bottom:10px;">
-        <svg id="sim-courbe" viewBox="0 0 300 170" style="width:100%;height:100%;"></svg>
-      </div>
-      <input type="range" id="sim-slider" min="0" max="${MONTANT_MAX_SLIDER}" step="100" value="10000" style="width:100%;accent-color:var(--orange);margin-bottom:16px;" />
-      <div style="display:flex;gap:12px;">
+      <div style="display:flex;gap:12px;margin-bottom:14px;">
         <div style="flex:1;">
           <p style="font-size:9px;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-muted);margin:0 0 4px;font-weight:600;">Montant (F)</p>
           <input type="text" inputmode="decimal" id="sim-montant" style="font-size:15px;font-weight:600;" />
@@ -2013,6 +2009,10 @@ function renderSimuler() {
           <input type="text" inputmode="decimal" id="sim-kwh" style="font-size:15px;font-weight:600;color:var(--success-text);border-color:var(--success-text);" />
         </div>
       </div>
+      <div style="position:relative;height:170px;margin-bottom:10px;">
+        <svg id="sim-courbe" viewBox="0 0 300 170" style="width:100%;height:100%;"></svg>
+      </div>
+      <input type="range" id="sim-slider" min="0" max="${montantMaxSlider}" step="100" value="10000" style="width:100%;accent-color:var(--orange);" />
     </div>
   `;
 
@@ -2026,9 +2026,9 @@ function renderSimuler() {
   function dessinerCourbe(cumulSimule, premierSimule, montantActuel) {
     const svg = document.getElementById("sim-courbe");
     const points = [];
-    const pas = MONTANT_MAX_SLIDER / 40;
+    const pas = montantMaxSlider / 40;
     let maxKwh = 0.001;
-    for (let m = 0; m <= MONTANT_MAX_SLIDER; m += pas) {
+    for (let m = 0; m <= montantMaxSlider; m += pas) {
       const res = calculerKwh(m, cumulSimule, premierSimule, tarifsActuels);
       const kwh = res.erreur ? 0 : res.kwh;
       points.push({ m, kwh });
@@ -2036,13 +2036,13 @@ function renderSimuler() {
     }
     const padL = 22, padB = 20, w = 300, h = 170;
     const plotW = w - padL - 10, plotH = h - padB - 10;
-    const toX = (m) => padL + (m / MONTANT_MAX_SLIDER) * plotW;
+    const toX = (m) => padL + (m / montantMaxSlider) * plotW;
     const toY = (kwh) => (h - padB) - (kwh / maxKwh) * plotH;
     const chemin = points.map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.m).toFixed(1)},${toY(p.kwh).toFixed(1)}`).join(" ");
 
     const resActuel = calculerKwh(montantActuel, cumulSimule, premierSimule, tarifsActuels);
     const kwhActuel = resActuel.erreur ? 0 : resActuel.kwh;
-    const px = toX(Math.min(montantActuel, MONTANT_MAX_SLIDER)).toFixed(1);
+    const px = toX(Math.min(montantActuel, montantMaxSlider)).toFixed(1);
     const py = toY(kwhActuel).toFixed(1);
 
     svg.innerHTML = `
@@ -2067,9 +2067,15 @@ function renderSimuler() {
       const res = calculerKwh(montantFinal, cumulSimule, premierSimule, tarifsActuels);
       kwhFinal = res.erreur ? 0 : res.kwh;
     }
+    // Le curseur s'elargit automatiquement plutot que de plafonner sur une
+    // valeur fixe arbitraire - toujours un peu de marge au-dela du point actuel.
+    if (montantFinal > montantMaxSlider * 0.95) {
+      montantMaxSlider = Math.ceil((montantFinal * 1.25) / 5000) * 5000;
+      document.getElementById("sim-slider").max = montantMaxSlider;
+    }
     document.getElementById("sim-montant").value = Math.round(montantFinal).toLocaleString("fr-FR");
     document.getElementById("sim-kwh").value = kwhFinal;
-    document.getElementById("sim-slider").value = Math.min(MONTANT_MAX_SLIDER, Math.round(montantFinal / 100) * 100);
+    document.getElementById("sim-slider").value = Math.min(montantMaxSlider, Math.round(montantFinal / 100) * 100);
     dessinerCourbe(cumulSimule, premierSimule, montantFinal);
   }
 
