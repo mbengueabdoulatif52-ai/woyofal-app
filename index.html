@@ -115,10 +115,10 @@
       </button>
     </div>
 
-    <p class="label" style="text-transform:uppercase;letter-spacing:0.05em;font-size:11px;">Categorie tarifaire</p>
+    <p class="label" style="text-transform:uppercase;letter-spacing:0.05em;font-size:11px;">Catégorie tarifaire</p>
     <select id="categorie-select" style="margin-bottom:10px;"></select>
     <div style="background:var(--warning-bg);border-radius:8px;padding:10px 12px;margin-bottom:16px;">
-      <p style="font-size:12px;color:var(--warning-text);margin:0;line-height:1.5;">Pas sur de ta categorie ? Compose <strong>809</strong> sur ton compteur (Verification usage).</p>
+      <p style="font-size:12px;color:var(--warning-text);margin:0;line-height:1.5;">Pas sûr de ta catégorie ? Compose <strong>809</strong> sur ton compteur (Verification usage).</p>
     </div>
     <button id="categorie-save-btn" class="primary" style="width:100%;margin-bottom:22px;">Enregistrer</button>
 
@@ -171,7 +171,7 @@ const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 const db = getFirestore(app);
 
-// Persistance hors-ligne : les donnees deja chargees restent consultables
+// Persistance hors-ligne : les donnees déjà chargees restent consultables
 // sans reseau, et les achats/releves ajoutes hors-ligne se synchronisent
 // automatiquement au retour de la connexion. Echoue silencieusement si
 // plusieurs onglets sont ouverts ou si le navigateur ne le supporte pas -
@@ -188,9 +188,9 @@ enableIndexedDbPersistence(db).catch((err) => {
 // 2. MOTEUR TARIFAIRE WOYOFAL (par categorie)
 // Chiffres 2026 confirmes par Senelec pour Domestique Petite Puissance
 // (grille tarifaire officielle + posts Woyofal). La redevance (429 F) n'est
-// confirmee que pour le DPP - a verifier pour les autres categories.
+// confirmee que pour le DPP - a verifier pour les autres catégories.
 // Taxe communale (2.5%) et TVA (18% au-dela de 250 kWh) sont des taxes
-// generiques, appliquees ici a toutes les categories.
+// generiques, appliquees ici a toutes les catégories.
 // ---------------------------------------------------------------
 const TARIFS_PAR_CATEGORIE = {
   DPP: {
@@ -246,7 +246,7 @@ function getTarifsActuels() {
 }
 
 const CODES_UTILES = [
-  { code: "800", label: "Consommation totale d'energie" },
+  { code: "800", label: "Consommation totale d'énergie" },
   { code: "801", label: "Credit restant" },
   { code: "804", label: "Numero du compteur" },
   { code: "808", label: "Puissance instantanee" },
@@ -255,12 +255,12 @@ const CODES_UTILES = [
   { code: "811", label: "Credit d'urgence (a activer une fois a zero)" },
   { code: "812", label: "Desactivation de l'alarme sonore" },
   { code: "813", label: "Consommation de la journee precedente" },
-  { code: "814", label: "Consommation d'energie du mois en cours" },
-  { code: "815", label: "Date de la derniere recharge" },
-  { code: "816", label: "Heure de la derniere recharge" },
-  { code: "817", label: "Montant de la derniere recharge" },
+  { code: "814", label: "Consommation d'énergie du mois en cours" },
+  { code: "815", label: "Date de la dernière recharge" },
+  { code: "816", label: "Heure de la dernière recharge" },
+  { code: "817", label: "Montant de la dernière recharge" },
   { code: "820", label: "Consommation du mois precedent" },
-  { code: "830", label: "Code de la derniere recharge" },
+  { code: "830", label: "Code de la dernière recharge" },
 ];
 
 function calculerKwh(montantFcfa, cumulDejaAchete, isPremierAchatDuMois, tarifs) {
@@ -319,7 +319,7 @@ function kwhRestantAvantProchainPalier(cumulKwh, tarifs) {
 // 2b. OPTIMISEUR D'ACHAT MULTI-MOIS
 // Chaque mois "frais" (a partir du 2e) repart a 0 kWh et redemande la
 // redevance mensuelle - donc etaler n'est rentable que si l'acces a la
-// tranche 1 (moins chere) du mois suivant compense ce cout fixe. Les
+// tranche 1 (moins chere) du mois suivant compense ce coût fixe. Les
 // deux fonctions ci-dessous remplissent les tranches disponibles par
 // prix croissant (les moins cheres d'abord, tous mois confondus).
 // ---------------------------------------------------------------
@@ -341,9 +341,9 @@ function genererSlotsMultiMois(nMois, cumulActuel, tarifs, besoinMois0) {
 
   if (besoinMois0 <= 0.01) return slots.map((s) => ({ ...s, priorite: 1 }));
 
-  // Le besoin physique reel du mois 0 (solde compteur + rythme) est isole
+  // Le besoin physique réel du mois 0 (solde compteur + rythme) est isolé
   // en priorite absolue, puise dans les tranches les moins cheres DU MOIS 0
-  // (dans l'ordre ou elles apparaissent deja triees par prix) - avant que
+  // (dans l'ordre ou elles apparaissent déjà triees par prix) - avant que
   // le reste ne rivalise normalement avec les autres mois sur le prix seul.
   let besoinRestant = besoinMois0;
   const resultat = [];
@@ -373,8 +373,8 @@ function redevancesParMois(nMois, premierMoisEstPremier, tarifs) {
 }
 
 // Budget fixe -> maximiser le kWh obtenu. La redevance d'un mois n'est
-// prelevee que lorsqu'on achete reellement quelque chose dans ce mois -
-// sinon etaler sur plus de mois serait toujours pire, meme quand ca
+// prelevee que lorsqu'on achète réellement quelque chose dans ce mois -
+// sinon etaler sur plus de mois serait toujours pire, même quand ca
 // n'aide pas (redevance payee pour rien).
 const MONTANT_MIN_ACHAT = 1000; // Woyofal vendu a partir de 1000 F (grille officielle Senelec)
 
@@ -414,9 +414,9 @@ function planifierParBudget(budget, nMois, cumulActuel, premierMoisEstPremier, t
     budgetRestant -= montantReelUtilise;
   }
 
-  // Chaque entree represente un achat Woyofal reel - en dessous de 1000 F ce
+  // Chaque entrée represente un achat Woyofal réel - en dessous de 1000 F ce
   // n'est pas realisable. On exclut ce mois et on relance plutot que de
-  // proposer un achat theorique impossible a faire dans la vraie vie.
+  // proposer un achat théorique impossible a faire dans la vraie vie.
   const moisSousMinimum = detail.findIndex((d) => d.montant > 0 && d.montant < MONTANT_MIN_ACHAT);
   if (moisSousMinimum !== -1 && moisExclus.length < nMois) {
     return planifierParBudget(budget, nMois, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0, [...moisExclus, moisSousMinimum]);
@@ -476,10 +476,10 @@ function planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, ta
 // "LE PLUS ECONOMIQUE" - nombre de mois trouve automatiquement
 // Grace au remplissage "paresseux" (un mois n'est ouvert, et sa redevance
 // facturee, que s'il sert vraiment), augmenter nMois ne peut jamais degrader
-// le resultat - donc on augmente tant que ca ameliore, et on s'arrete des
+// le résultat - donc on augmente tant que ca ameliore, et on s'arrete des
 // que ce n'est plus le cas. Pas de plafond fixe cote metier, juste une
-// securite anti-boucle et un seuil d'avertissement pour un plan trop etale.
-// A resultat economique egal (a 0.01 pres), on depage par : moins de mois
+// sécurité anti-boucle et un seuil d'avertissement pour un plan trop étalé.
+// A résultat économique égal (a 0.01 pres), on depage par : moins de mois
 // ouverts, puis moins d'achats - hierarchie validee par revue croisee.
 // ---------------------------------------------------------------
 const PLAFOND_SECURITE_MOIS = 24;
@@ -498,7 +498,7 @@ function planifierLePlusEconomique(mode, valeur, cumulActuel, premierMoisEstPrem
     if (diff > 0.01) {
       meilleur = candidat;
     } else if (Math.abs(diff) <= 0.01 && candidat.nbMoisOuverts < meilleur.nbMoisOuverts) {
-      meilleur = candidat; // egalite economique, mais moins de mois ouverts
+      meilleur = candidat; // égalité économique, mais moins de mois ouverts
     } else {
       break;
     }
@@ -507,9 +507,9 @@ function planifierLePlusEconomique(mode, valeur, cumulActuel, premierMoisEstPrem
   return meilleur;
 }
 
-// Besoin physique reel du mois en cours (independant des tranches) : ce
+// Besoin physique réel du mois en cours (independant des tranches) : ce
 // qu'il faut acheter en plus pour ne pas tomber a sec avant la fin du mois
-// calendaire, compte tenu de ce qui est deja sur le compteur. Sans rythme
+// calendaire, compte tenu de ce qui est déjà sur le compteur. Sans rythme
 // connu, aucune garantie n'est possible - on retombe sur l'optimisation pure.
 const JOURS_MARGE_SECURITE = 5;
 
@@ -522,7 +522,7 @@ function calculerBesoinMois0(rythme) {
   if (!rythme || rythme <= 0) return 0;
   const maintenant = new Date();
   // Couvre jusqu'au JOURS_MARGE_SECURITE du mois suivant, pas juste jusqu'au
-  // 30/31 - une marge pour ne pas tomber a sec si la conso reelle depasse
+  // 30/31 - une marge pour ne pas tomber a sec si la conso réelle depasse
   // un peu la moyenne sur quelques jours, ou avant d'avoir eu le temps de
   // faire le prochain achat.
   const dateCible = dateLimiteMois0();
@@ -533,10 +533,10 @@ function calculerBesoinMois0(rythme) {
 }
 
 // Compare "utiliser la capacite restante du mois en cours" contre "sauter
-// entierement ce mois et tout acheter a partir du mois prochain". Les deux
-// peuvent donner le meme total (meme tarif partout) - dans ce cas, on
+// entièrement ce mois et tout acheter a partir du mois prochain". Les deux
+// peuvent donner le même total (même tarif partout) - dans ce cas, on
 // prefere celle qui demande le moins d'achats. Uniquement pertinent quand
-// le mois en cours n'a aucun besoin reel a couvrir (sinon le sauter serait
+// le mois en cours n'a aucun besoin réel a couvrir (sinon le sauter serait
 // dangereux, pas juste sous-optimal).
 function planifierMeilleureStrategie(mode, valeur, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0) {
   const optionA = planifierLePlusEconomique(mode, valeur, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0);
@@ -559,11 +559,11 @@ function planifierMeilleureStrategie(mode, valeur, cumulActuel, premierMoisEstPr
 
 // ---------------------------------------------------------------
 // FACTEUR DE CORRECTION INTERNE (Optimiseur uniquement)
-// Compare, sur l'historique du compteur, le kWh reellement recu (SMS) au
-// kWh theorique que la formule avait estime au moment de l'achat. Le ratio
+// Compare, sur l'historique du compteur, le kWh reellement reçu (SMS) au
+// kWh théorique que la formule avait estimé au moment de l'achat. Le ratio
 // moyen sert a affiner silencieusement les projections de l'Optimiseur,
 // sans jamais toucher aux constantes tarifaires ni au reste de l'appli
-// (le formulaire d'achat et la detection d'ecart restent sur la formule
+// (le formulaire d'achat et la detection d'écart restent sur la formule
 // pure, volontairement, pour continuer a detecter les anomalies).
 // ---------------------------------------------------------------
 const SEUIL_ACHATS_CALIBRATION = 5;
@@ -629,7 +629,7 @@ function joursEntre(d1, d2) {
 
 function intervallesConsommation(releves, achats) {
   const RYTHME_MAX_PLAUSIBLE = 50; // kWh/jour - au-dela, c'est forcement une erreur de saisie
-  // ou une ambiguite d'ordre achat/releve le meme jour (on ne suit que la date, pas l'heure).
+  // ou une ambiguite d'ordre achat/releve le même jour (on ne suit que la date, pas l'heure).
   const sorted = [...releves].sort((a, b) => toDate(a.date) - toDate(b.date));
   const intervalles = [];
   for (let i = 0; i < sorted.length - 1; i++) {
@@ -844,12 +844,12 @@ function renderCompteursListe() {
     <div style="border:1px solid var(--border);border-radius:10px;padding:12px;">
       <p class="label" style="text-transform:uppercase;letter-spacing:0.05em;font-size:11px;">Nom</p>
       <input type="text" id="nouveau-compteur-nom" placeholder="Ex: Bureau" style="margin-bottom:10px;" />
-      <p class="label" style="text-transform:uppercase;letter-spacing:0.05em;font-size:11px;">Categorie tarifaire</p>
+      <p class="label" style="text-transform:uppercase;letter-spacing:0.05em;font-size:11px;">Catégorie tarifaire</p>
       <select id="nouveau-compteur-categorie" style="margin-bottom:10px;">
         ${Object.keys(TARIFS_PAR_CATEGORIE).map((code) => `<option value="${code}">${TARIFS_PAR_CATEGORIE[code].label}</option>`).join("")}
       </select>
       <div style="display:flex;gap:8px;">
-        <button type="button" class="primary" id="nouveau-compteur-creer" style="flex:1;">Creer</button>
+        <button type="button" class="primary" id="nouveau-compteur-creer" style="flex:1;">Créer</button>
         <button type="button" id="nouveau-compteur-annuler">Annuler</button>
       </div>
     </div>
@@ -951,8 +951,8 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 // Deplace les anciennes donnees "a plat" (users/{uid}/achats, /releves) vers
-// un premier compteur "Compteur 1", si ce n'est pas deja fait. Ne s'execute
-// qu'une fois par compte (ne fait rien si des compteurs existent deja).
+// un premier compteur "Compteur 1", si ce n'est pas déjà fait. Ne s'execute
+// qu'une fois par compte (ne fait rien si des compteurs existent déjà).
 async function migrerVersMultiCompteurs(uid) {
   const compteursSnap = await getDocs(collection(db, "users", uid, "compteurs"));
   if (!compteursSnap.empty) return;
@@ -1302,7 +1302,7 @@ function renderAlerteSolde() {
     el.innerHTML = `
       <div style="background:var(--danger-bg);border-radius:10px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;margin-bottom:20px;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--danger-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-        <p style="font-size:13px;color:var(--danger-text);margin:0;line-height:1.5;"><strong>Solde presque epuise</strong> - environ ${jours} jour${jours > 1 ? "s" : ""} restant${jours > 1 ? "s" : ""} a ton rythme actuel, a sec vers le ${prevision.dateEstimee.toLocaleDateString("fr-FR")}.</p>
+        <p style="font-size:13px;color:var(--danger-text);margin:0;line-height:1.5;"><strong>Solde presque épuisé</strong> - environ ${jours} jour${jours > 1 ? "s" : ""} restant${jours > 1 ? "s" : ""} a ton rythme actuel, a sec vers le ${prevision.dateEstimee.toLocaleDateString("fr-FR")}.</p>
       </div>
     `;
   } else {
@@ -1315,11 +1315,11 @@ function renderRappelReleve() {
   if (!el) return;
   let message = null;
   if (releves.length === 0) {
-    message = "<strong>Aucun releve enregistre</strong> - ajoutes-en un pour activer les previsions.";
+    message = "<strong>Aucun releve enregistre</strong> - ajoutes-en un pour activer les prévisions.";
   } else {
     const jours = Math.floor(joursEntre(releves[0].date, new Date()));
     if (jours >= SEUIL_JOURS_RELEVE) {
-      message = `<strong>Pas de releve depuis ${jours} jour${jours > 1 ? "s" : ""}</strong> - ajoutes-en un pour garder des previsions fiables.`;
+      message = `<strong>Pas de releve depuis ${jours} jour${jours > 1 ? "s" : ""}</strong> - ajoutes-en un pour garder des prévisions fiables.`;
     }
   }
   if (message) {
@@ -1386,7 +1386,7 @@ function detailAchatHtml(redevance, taxeCommunaleMontant, tvaMontant, kwh) {
       `).join("")}
       ${lignes.length ? `<div style="height:1px;background:var(--border);margin:6px 0;"></div>` : ""}
       <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-primary);font-weight:600;padding:3px 0;">
-        <span>Converti en energie</span><span>${kwh} kWh</span>
+        <span>Converti en énergie</span><span>${kwh} kWh</span>
       </div>
     </div>
   `;
@@ -1418,7 +1418,7 @@ function renderDashboard() {
     } else {
       coutEstimeHtml = `
         <div style="background:var(--success-bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;">
-          <p style="font-size:12.5px;color:var(--success-text);margin:0;">Pas d'achat necessaire pour l'instant - ton solde couvre deja tes besoins jusqu'au ${dateLimiteMois0().toLocaleDateString("fr-FR")}.</p>
+          <p style="font-size:12.5px;color:var(--success-text);margin:0;">Pas d'achat nécessaire pour l'instant - ton solde couvre déjà tes besoins jusqu'au ${dateLimiteMois0().toLocaleDateString("fr-FR")}.</p>
         </div>
       `;
     }
@@ -1433,7 +1433,7 @@ function renderDashboard() {
   tabContent.innerHTML = `
     <div class="grid" style="margin-bottom:20px;">
       <div class="card" style="background:${style.bg};border-color:transparent;">
-        ${statHead("wallet", "kWh achetes ce mois", style.text)}
+        ${statHead("wallet", "kWh achetés ce mois", style.text)}
         ${statValue(cumul.toFixed(1), "kWh", style.text)}
         <p style="font-size:11px;margin:6px 0 0;color:${style.text};">${style.label}</p>
       </div>
@@ -1461,9 +1461,9 @@ function renderDashboard() {
     </div>
 
     <div class="card" style="margin-bottom:20px;">
-      <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Previsions</p>
+      <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Prévisions</p>
       ${releves.length < 2
-        ? `<p style="font-size:13px;color:var(--text-secondary);margin:0;">Ajoute au moins 2 releves espaces dans le temps (onglet Releves) pour activer les previsions.</p>`
+        ? `<p style="font-size:13px;color:var(--text-secondary);margin:0;">Ajoute au moins 2 releves espaces dans le temps (onglet Releves) pour activer les prévisions.</p>`
         : `
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;margin-bottom:16px;">
             <div style="padding:0 12px 0 0;border-right:1px solid var(--border);">
@@ -1481,9 +1481,9 @@ function renderDashboard() {
           </div>
           ${coutEstimeHtml}
           <div style="height:1px;background:var(--border);margin:0 0 14px;"></div>
-          ${statHead("chart", "Conso par periode (kWh/j)")}
+          ${statHead("chart", "Conso par période (kWh/j)")}
           ${graphiqueConsommationSVG(intervalles)}
-          ${aAnomalie ? `<p style="font-size:12px;color:var(--danger-text);margin:8px 0 0;">Une periode en rouge signale un rythme incoherent (negatif ou irrealiste) sur cette periode - souvent un achat et un releve enregistres le meme jour dans le mauvais ordre. Cet intervalle est exclu du rythme moyen.</p>` : ""}
+          ${aAnomalie ? `<p style="font-size:12px;color:var(--danger-text);margin:8px 0 0;">Une période en rouge signale un rythme incoherent (negatif ou irrealiste) sur cette période - souvent un achat et un releve enregistres le même jour dans le mauvais ordre. Cet intervalle est exclu du rythme moyen.</p>` : ""}
         `
       }
     </div>
@@ -1497,7 +1497,7 @@ function renderDashboard() {
 
       <div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:14px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <span style="font-size:12px;color:var(--text-secondary);">Rythme utilise : <strong id="opt-rythme-valeur" style="color:var(--text-primary);">-</strong></span>
+          <span style="font-size:12px;color:var(--text-secondary);">Rythme utilisé : <strong id="opt-rythme-valeur" style="color:var(--text-primary);">-</strong></span>
           <span id="opt-rythme-source" style="font-size:11px;color:var(--text-muted);"></span>
         </div>
         <p style="font-size:11px;color:var(--text-muted);margin:0 0 6px;">Affiner avec ta conso du mois en cours (code 814)</p>
@@ -1509,7 +1509,7 @@ function renderDashboard() {
       </div>
 
       <p id="opt-label" style="font-size:12px;color:var(--text-muted);margin:0 0 4px;">Combien veux-tu depenser au total ?</p>
-      <p style="font-size:11.5px;color:var(--text-muted);margin:0 0 8px;">${estPremierAchatDuMois(achats) ? "Ce serait ton 1er achat du mois (redevance appliquee)." : "Redevance deja payee ce mois-ci."}</p>
+      <p style="font-size:11.5px;color:var(--text-muted);margin:0 0 8px;">${estPremierAchatDuMois(achats) ? "Ce serait ton 1er achat du mois (redevance appliquee)." : "Redevance déjà payee ce mois-ci."}</p>
       <div style="display:flex;gap:8px;margin-bottom:14px;">
         <input type="text" inputmode="decimal" id="opt-input" placeholder="Montant en FCFA" style="flex:1;" />
         <button class="accent" id="opt-btn">Comparer</button>
@@ -1670,7 +1670,7 @@ function renderDashboard() {
           const gainKwh = economique.kwhTotal - rapide.kwhTotal;
           if (gainKwh > 0.5) {
             const gainF = Math.round(gainKwh * tarifsActuels.tranches[0].prix);
-            sousTexteEco = `Equivaut a ${gainF.toLocaleString("fr-FR")} F d'electricite en plus, meme budget`;
+            sousTexteEco = `Equivaut a ${gainF.toLocaleString("fr-FR")} F d'electricite en plus, même budget`;
           } else if (economique.decalageMois) {
             sousTexteEco = "Meme resultat qu'acheter maintenant, mais en un seul achat";
           }
@@ -1679,20 +1679,20 @@ function renderDashboard() {
           if (diff > 0.5) {
             sousTexteEco = `${diff.toLocaleString("fr-FR")} F de moins que tout maintenant`;
           } else if (economique.decalageMois) {
-            sousTexteEco = "Meme cout qu'acheter maintenant, mais en un seul achat";
+            sousTexteEco = "Meme coût qu'acheter maintenant, mais en un seul achat";
           }
         }
       }
       html += rendreOptionOptimiseur("Le plus economique", `${nbMoisEconomique} achat${nbMoisEconomique > 1 ? "s" : ""}`, true, infoEco ? infoEco.headline : "", sousTexteEco, economique.detail, economique.erreur, infoEco ? infoEco.extra : null, economique.decalageMois || 0);
 
       if (nbMoisEconomique > SEUIL_AVERTISSEMENT_MOIS) {
-        html += `<div style="background:var(--warning-bg);border-radius:8px;padding:10px 12px;margin-bottom:10px;"><p style="font-size:12px;color:var(--warning-text);margin:0;line-height:1.5;">Ce plan s'etale sur ${nbMoisEconomique} mois - verifie que ca reste raisonnable pour toi avant de t'y engager.</p></div>`;
+        html += `<div style="background:var(--warning-bg);border-radius:8px;padding:10px 12px;margin-bottom:10px;"><p style="font-size:12px;color:var(--warning-text);margin:0;line-height:1.5;">Ce plan s'étalé sur ${nbMoisEconomique} mois - vérifie que ca reste raisonnable pour toi avant de t'y engager.</p></div>`;
       }
     }
 
     const previsionEffective = joursRestantsEtDate(releves, achats, tauxEffectif);
     if (previsionEffective) {
-      html += `<div style="background:var(--warning-bg);border-radius:8px;padding:10px 12px;"><p style="font-size:12px;color:var(--warning-text);margin:0;line-height:1.5;">A ce rythme, ton solde compteur tient environ ${Math.round(previsionEffective.joursRestants)} jours - verifie que ca suffise avant le prochain achat prevu pour les options etalees.</p></div>`;
+      html += `<div style="background:var(--warning-bg);border-radius:8px;padding:10px 12px;"><p style="font-size:12px;color:var(--warning-text);margin:0;line-height:1.5;">A ce rythme, ton solde compteur tient environ ${Math.round(previsionEffective.joursRestants)} jours - vérifie que ca suffise avant le prochain achat prevu pour les options etalees.</p></div>`;
     }
 
     if (besoinMois0 > 0.01) {
@@ -1738,7 +1738,7 @@ function renderAchats() {
           <input type="text" inputmode="decimal" id="a-kwh" value="${achatEdite ? achatEdite.kwh : ""}" />
         </div>
       </div>
-      <p style="font-size:12.5px;color:var(--text-muted);margin:0 0 10px;">Le champ kWh se pre-remplit en quittant le champ montant - corrige-le avec le chiffre reel recu par SMS.</p>
+      <p style="font-size:12.5px;color:var(--text-muted);margin:0 0 10px;">Le champ kWh se pre-remplit en quittant le champ montant - corrige-le avec le chiffre reel reçu par SMS.</p>
       <div id="a-detail" style="margin-bottom:10px;"></div>
       <p id="a-ecart" style="font-size:12px;color:var(--warning-text);margin:0 0 10px;display:none;line-height:1.5;"></p>
       <p id="a-error" style="font-size:13px;color:var(--danger-text);margin:0 0 10px;display:none;"></p>
@@ -1822,7 +1822,7 @@ function renderAchats() {
     const ecartRelatif = ecart / estimationKwh;
     if (ecartRelatif > 0.02 && ecart > 0.3) {
       aEcartEl.style.display = "block";
-      aEcartEl.textContent = `Ecart de ${ecart.toFixed(1)} kWh (${Math.round(ecartRelatif * 100)}%) avec l'estimation (${estimationKwh} kWh). Si ca se reproduit a chaque achat, verifie ta categorie tarifaire dans Parametres - ou la formule (redevance/taxe/TVA) doit peut-etre etre ajustee pour ta categorie.`;
+      aEcartEl.textContent = `Ecart de ${ecart.toFixed(1)} kWh (${Math.round(ecartRelatif * 100)}%) avec l'estimation (${estimationKwh} kWh). Si ca se reproduit a chaque achat, vérifie ta catégorie tarifaire dans Parametres - ou la formule (redevance/taxe/TVA) doit peut-etre etre ajustee pour ta catégorie.`;
     } else {
       aEcartEl.style.display = "none";
     }
@@ -1981,8 +1981,8 @@ function renderReleves() {
 
 // ---------------------------------------------------------------
 // 5. MODE SIMPLE - calculatrice montant <-> kWh, independante des
-// donnees de suivi. Reste sur la categorie du compteur actif (par
-// defaut DPP) plutot que d'ajouter un choix de categorie ici.
+// donnees de suivi. Reste sur la catégorie du compteur actif (par
+// defaut DPP) plutot que d'ajouter un choix de catégorie ici.
 // ---------------------------------------------------------------
 function renderSimuler() {
   const el = document.getElementById("simuler-content");
@@ -1996,8 +1996,8 @@ function renderSimuler() {
   el.innerHTML = `
     <div class="card">
       <p style="font-size:14px;font-weight:600;margin:0 0 4px;">Combien de kWh vais-je obtenir ?</p>
-      <p style="font-size:11px;color:var(--text-muted);margin:0 0 14px;">Categorie ${tarifsActuels.label}</p>
-      <p style="font-size:12px;color:var(--text-secondary);margin:0 0 4px;">Montant deja achete ce mois-ci</p>
+      <p style="font-size:11px;color:var(--text-muted);margin:0 0 14px;">Catégorie ${tarifsActuels.label}</p>
+      <p style="font-size:12px;color:var(--text-secondary);margin:0 0 4px;">Montant déjà acheté ce mois-ci</p>
       <input type="text" inputmode="decimal" id="sim-montant-prealable" value="${totalMontantMois || ""}" placeholder="0" style="margin-bottom:16px;" />
       <div style="display:flex;gap:12px;margin-bottom:14px;">
         <div style="flex:1;">
