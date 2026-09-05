@@ -82,9 +82,9 @@
     </div>
   </div>
 
-  <div style="display:flex;background:var(--surface);border-radius:10px;padding:3px;margin-bottom:16px;border:1px solid var(--border);">
+  <div style="display:flex;background:var(--bg);border-radius:10px;padding:3px;margin-bottom:16px;">
     <button type="button" id="toggle-simple" style="flex:1;text-align:center;padding:8px;border:none;border-radius:8px;font-size:12.5px;background:none;color:var(--text-muted);">Simple</button>
-    <button type="button" id="toggle-avance" style="flex:1;text-align:center;padding:8px;border:none;border-radius:8px;font-size:12.5px;background:var(--navy);font-weight:600;color:#fff;">Avancé</button>
+    <button type="button" id="toggle-avance" style="flex:1;text-align:center;padding:8px;border:none;border-radius:8px;font-size:12.5px;background:var(--surface);font-weight:600;color:var(--text-primary);">Avancé</button>
   </div>
 
   <div id="alerte-solde"></div>
@@ -1272,11 +1272,11 @@ function render() {
 
 function appliquerModeAffichage() {
   const estSimple = modeAffichage === "simple";
-  document.getElementById("toggle-simple").style.background = estSimple ? "var(--navy)" : "none";
-  document.getElementById("toggle-simple").style.color = estSimple ? "#fff" : "var(--text-muted)";
+  document.getElementById("toggle-simple").style.background = estSimple ? "var(--surface)" : "none";
+  document.getElementById("toggle-simple").style.color = estSimple ? "var(--text-primary)" : "var(--text-muted)";
   document.getElementById("toggle-simple").style.fontWeight = estSimple ? "600" : "400";
-  document.getElementById("toggle-avance").style.background = estSimple ? "none" : "var(--navy)";
-  document.getElementById("toggle-avance").style.color = estSimple ? "var(--text-muted)" : "#fff";
+  document.getElementById("toggle-avance").style.background = estSimple ? "none" : "var(--surface)";
+  document.getElementById("toggle-avance").style.color = estSimple ? "var(--text-muted)" : "var(--text-primary)";
   document.getElementById("toggle-avance").style.fontWeight = estSimple ? "400" : "600";
 
   document.getElementById("simuler-content").style.display = estSimple ? "block" : "none";
