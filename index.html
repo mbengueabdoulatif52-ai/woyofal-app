@@ -1987,7 +1987,7 @@ function renderReleves() {
 function renderSimuler() {
   const el = document.getElementById("simuler-content");
   if (!el) return;
-  const tarifsActuels = getTarifsActuels();
+  let tarifsActuels = getTarifsActuels();
   const montantMaxSlider = 200000; // plafond fixe - toute la courbe/graduations en decoulent
   let dernierCumul = null, dernierPremier = null; // pour ne redessiner la structure que si besoin
 
@@ -2000,7 +2000,8 @@ function renderSimuler() {
   el.innerHTML = `
     <div class="card">
       <p style="font-size:14px;font-weight:600;margin:0 0 4px;">Combien de kWh vais-je obtenir ?</p>
-      <p style="font-size:11px;color:var(--text-muted);margin:0 0 14px;">Catégorie ${tarifsActuels.label}</p>
+      <p style="font-size:12px;color:var(--text-secondary);margin:0 0 4px;">Catégorie tarifaire</p>
+      <select id="sim-categorie" style="margin-bottom:14px;"></select>
       <p style="font-size:12px;color:var(--text-secondary);margin:0 0 4px;">Montant déjà acheté ce mois-ci</p>
       <input type="text" inputmode="decimal" id="sim-montant-prealable" value="${totalMontantMois || ""}" placeholder="0" style="margin-bottom:16px;" />
       <div style="display:flex;gap:12px;margin-bottom:14px;">
@@ -2025,6 +2026,20 @@ function renderSimuler() {
       <div id="sim-detail"></div>
     </div>
   `;
+
+  const categorieSelectSim = document.getElementById("sim-categorie");
+  Object.keys(TARIFS_PAR_CATEGORIE).forEach((code) => {
+    const opt = document.createElement("option");
+    opt.value = code;
+    opt.textContent = TARIFS_PAR_CATEGORIE[code].label;
+    if (code === categorieTarifaire) opt.selected = true;
+    categorieSelectSim.appendChild(opt);
+  });
+  categorieSelectSim.addEventListener("change", () => {
+    tarifsActuels = TARIFS_PAR_CATEGORIE[categorieSelectSim.value] || TARIFS_PAR_CATEGORIE.DPP;
+    dernierCumul = null; dernierPremier = null; // force le redessin complet (tarifs differents)
+    majAffichage(parseFloat(document.getElementById("sim-slider").value) || 10000, false);
+  });
 
   function etatSimulation() {
     const montantPrealable = parseMontant(document.getElementById("sim-montant-prealable").value) || 0;
