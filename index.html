@@ -189,7 +189,8 @@ enableIndexedDbPersistence(db).catch((err) => {
 // Chiffres 2026 confirmes par Senelec pour Domestique Petite Puissance
 // (grille tarifaire officielle + posts Woyofal). La redevance (429 F) n'est
 // confirmee que pour le DPP - a verifier pour les autres catégories.
-// Taxe communale (2.5%) et TVA (18% au-dela de 250 kWh) sont des taxes
+// Taxe communale (2.5%) et TVA (18%, au-dela d'un seuil qui varie selon la
+// categorie - 250 kWh en DPP, 300 en DMP, 500 en pro) sont des taxes
 // generiques, appliquees ici a toutes les catégories.
 // ---------------------------------------------------------------
 const TARIFS_PAR_CATEGORIE = {
@@ -211,7 +212,7 @@ const TARIFS_PAR_CATEGORIE = {
     tva: 0.18,
     tranches: [
       { max: 150, prix: 111.23 },
-      { max: 250, prix: 143.54 },
+      { max: 300, prix: 143.54 },
       { max: null, prix: 143.54, tvaApplicable: true },
     ],
   },
@@ -222,7 +223,7 @@ const TARIFS_PAR_CATEGORIE = {
     tva: 0.18,
     tranches: [
       { max: 150, prix: 147.43 },
-      { max: 250, prix: 189.84 },
+      { max: 500, prix: 189.84 },
       { max: null, prix: 189.84, tvaApplicable: true },
     ],
   },
@@ -233,7 +234,7 @@ const TARIFS_PAR_CATEGORIE = {
     tva: 0.18,
     tranches: [
       { max: 150, prix: 165.01 },
-      { max: 250, prix: 191.01 },
+      { max: 500, prix: 191.01 },
       { max: null, prix: 191.01, tvaApplicable: true },
     ],
   },
@@ -1372,11 +1373,12 @@ function statValue(value, unit, color) {
   return `<p style="margin:0;font-variant-numeric:tabular-nums;"><span style="font-size:20px;font-weight:700;color:${color};">${value}</span>${unit ? ` <span style="font-size:12px;color:var(--text-muted);">${unit}</span>` : ""}</p>`;
 }
 
-function detailAchatHtml(redevance, taxeCommunaleMontant, tvaMontant, kwh) {
+function detailAchatHtml(redevance, taxeCommunaleMontant, tvaMontant, kwh, seuilTva) {
+  seuilTva = seuilTva || 250;
   const lignes = [];
   if (redevance > 0) lignes.push(["Redevance (1er achat du mois)", redevance]);
   if (taxeCommunaleMontant > 0) lignes.push(["Taxe communale (2,5%)", taxeCommunaleMontant]);
-  if (tvaMontant > 0) lignes.push(["TVA (18%, au-dela de 250 kWh)", tvaMontant]);
+  if (tvaMontant > 0) lignes.push([`TVA (18%, au-dela de ${seuilTva} kWh)`, tvaMontant]);
   return `
     <div style="background:var(--bg);border-radius:8px;padding:12px;">
       ${lignes.map(([label, montant]) => `
@@ -1780,7 +1782,7 @@ function renderAchats() {
                 </button>
               </div>
             </div>
-            ${aDetail ? `<div id="detail-achat-${a.id}" style="display:none;margin-top:10px;">${detailAchatHtml(a.redevance, a.taxeCommunaleMontant, a.tvaMontant, a.kwh)}</div>` : ""}
+            ${aDetail ? `<div id="detail-achat-${a.id}" style="display:none;margin-top:10px;">${detailAchatHtml(a.redevance, a.taxeCommunaleMontant, a.tvaMontant, a.kwh, getTarifsActuels().tranches[1].max)}</div>` : ""}
           </div>`;
         }).join("")}</div>`
     }
@@ -1800,7 +1802,7 @@ function renderAchats() {
         aKwhEl.value = res.kwh;
         estimationKwh = res.kwh;
         aEcartEl.style.display = "none";
-        detailEl.innerHTML = detailAchatHtml(res.redevance, res.taxeCommunaleMontant, res.tvaMontant, res.kwh);
+        detailEl.innerHTML = detailAchatHtml(res.redevance, res.taxeCommunaleMontant, res.tvaMontant, res.kwh, getTarifsActuels().tranches[1].max);
       } else {
         detailEl.innerHTML = "";
         estimationKwh = null;
@@ -2069,8 +2071,10 @@ function renderSimuler() {
     const chemin = points.map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.m).toFixed(1)},${toY(p.kwh).toFixed(1)}`).join(" ");
 
     let montantSeuil1 = null, montantSeuil2 = null;
-    if (cumulSimule < 150) montantSeuil1 = planifierParKwh(150 - cumulSimule, 1, cumulSimule, premierSimule, tarifsActuels).montantTotal;
-    if (cumulSimule < 250) montantSeuil2 = planifierParKwh(250 - cumulSimule, 1, cumulSimule, premierSimule, tarifsActuels).montantTotal;
+    const borne1 = tarifsActuels.tranches[0].max;
+    const borne2 = tarifsActuels.tranches[1].max;
+    if (cumulSimule < borne1) montantSeuil1 = planifierParKwh(borne1 - cumulSimule, 1, cumulSimule, premierSimule, tarifsActuels).montantTotal;
+    if (cumulSimule < borne2) montantSeuil2 = planifierParKwh(borne2 - cumulSimule, 1, cumulSimule, premierSimule, tarifsActuels).montantTotal;
     const xSeuil1 = montantSeuil1 !== null ? Math.min(toX(montantSeuil1), W - padR) : padL;
     const xSeuil2 = montantSeuil2 !== null ? Math.min(toX(montantSeuil2), W - padR) : padL;
 
@@ -2115,7 +2119,7 @@ function renderSimuler() {
 
   function majDetail(montantActuel, cumulSimule, premierSimule) {
     const res = calculerKwh(montantActuel, cumulSimule, premierSimule, tarifsActuels);
-    document.getElementById("sim-detail").innerHTML = res.erreur ? "" : detailAchatHtml(res.redevance, res.taxeCommunaleMontant, res.tvaMontant, res.kwh);
+    document.getElementById("sim-detail").innerHTML = res.erreur ? "" : detailAchatHtml(res.redevance, res.taxeCommunaleMontant, res.tvaMontant, res.kwh, tarifsActuels.tranches[1].max);
   }
 
   function majAffichage(valeur, depuisKwh) {
