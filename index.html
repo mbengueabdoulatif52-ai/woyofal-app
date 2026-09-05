@@ -674,21 +674,61 @@ function joursRestantsEtDate(releves, achats, taux) {
   return { soldeEstime: Math.max(0, soldeEstime), joursRestants, dateEstimee };
 }
 
+// Regroupe les intervalles bruts (releve a releve) en moyennes par jour
+// calendaire, ponderees par le temps de recouvrement. Gere les deux sens :
+// un jour couvert par plusieurs intervalles courts (releves rapproches) est
+// moyenne entre eux ; un intervalle qui s'etale sur plusieurs jours (gros
+// ecart entre deux releves) est reparti sur chacun de ces jours avec le
+// meme taux, faute de donnee plus fine. Les intervalles anormaux sont
+// ignores, comme pour le rythme moyen global.
+function agregerParJour(intervalles) {
+  const valides = intervalles.filter((iv) => !iv.anomalie);
+  if (valides.length === 0) return [];
+  const debutGlobal = new Date(Math.min(...valides.map((iv) => toDate(iv.debut).getTime())));
+  const finGlobal = new Date(Math.max(...valides.map((iv) => toDate(iv.fin).getTime())));
+  const jourDebut = new Date(debutGlobal.getFullYear(), debutGlobal.getMonth(), debutGlobal.getDate());
+  const jourFin = new Date(finGlobal.getFullYear(), finGlobal.getMonth(), finGlobal.getDate());
+
+  const jours = [];
+  for (let j = new Date(jourDebut); j <= jourFin; j.setDate(j.getDate() + 1)) {
+    const debutJour = new Date(j);
+    const finJour = new Date(j); finJour.setDate(finJour.getDate() + 1);
+    let kwhPondere = 0, couverture = 0;
+    for (const iv of valides) {
+      const debutChevauchement = Math.max(debutJour.getTime(), toDate(iv.debut).getTime());
+      const finChevauchement = Math.min(finJour.getTime(), toDate(iv.fin).getTime());
+      const recouvrementMs = finChevauchement - debutChevauchement;
+      if (recouvrementMs <= 0) continue;
+      const recouvrementJours = recouvrementMs / (1000 * 60 * 60 * 24);
+      kwhPondere += recouvrementJours * iv.tauxJournalier;
+      couverture += recouvrementJours;
+    }
+    if (couverture > 0) jours.push({ date: new Date(j), tauxJournalier: kwhPondere / couverture });
+  }
+  return jours;
+}
+
 function graphiqueConsommationSVG(intervalles) {
   if (intervalles.length < 2) {
     return `<p style="font-size:13px;color:var(--text-secondary);margin:0;">Ajoute encore un relevé pour voir l'evolution dans le temps (un seul intervalle ne donne rien a comparer).</p>`;
   }
-  const derniers = intervalles.slice(-8);
-  const maxTaux = Math.max(...derniers.map((i) => Math.max(0, i.tauxJournalier)), 0.1);
-  const width = 300, height = 90, barWidth = width / derniers.length;
-  const bars = derniers.map((iv, idx) => {
-    const h = Math.max(2, (Math.max(0, iv.tauxJournalier) / maxTaux) * (height - 22));
+  const jours = agregerParJour(intervalles);
+  if (jours.length < 2) {
+    return `<p style="font-size:13px;color:var(--text-secondary);margin:0;">Ajoute encore un relevé pour voir l'evolution dans le temps (un seul intervalle ne donne rien a comparer).</p>`;
+  }
+  const derniers = jours.slice(-8);
+  const maxTaux = Math.max(...derniers.map((j) => Math.max(0, j.tauxJournalier)), 0.1);
+  const width = 300, height = 105, padHaut = 14, padBas = 16, barWidth = width / derniers.length;
+  const bars = derniers.map((jr, idx) => {
+    const taux = Math.max(0, jr.tauxJournalier);
+    const h = Math.max(2, (taux / maxTaux) * (height - padHaut - padBas));
     const x = idx * barWidth + barWidth * 0.15;
     const w = barWidth * 0.7;
-    const y = height - h - 16;
-    const color = iv.anomalie ? "#B23A2A" : "#1B3A52";
-    const label = toDate(iv.fin).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
-    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${color}" rx="2"></rect>
+    const y = height - h - padBas;
+    const color = "#1B3A52";
+    const label = jr.date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+    return `<text x="${x + w / 2}" y="${y - 4}" font-size="9" fill="var(--text-secondary)" text-anchor="middle">${taux.toFixed(1)}</text>
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${color}" rx="2"></rect>
       <text x="${x + w / 2}" y="${height - 4}" font-size="9" fill="#8A9199" text-anchor="middle">${label}</text>`;
   }).join("");
   return `<svg viewBox="0 0 ${width} ${height}" style="width:100%;height:auto;">${bars}</svg>`;
