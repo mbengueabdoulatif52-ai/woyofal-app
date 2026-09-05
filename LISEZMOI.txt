@@ -31,14 +31,27 @@ ETAPES
 
 A VERIFIER
 ----------
-Les tranches (82,00 / 136,49 / 136,49+TVA) viennent de la grille tarifaire
-officielle Senelec (2026). La redevance mensuelle (429 FCFA) et la taxe
-communale (2,5%) sont confirmees pour la categorie Domestique Petite
-Puissance (DPP) via les visuels Woyofal officiels - pas verifiees pour les
-categories DMP/PPP/PMP, qui utilisent la meme redevance par defaut faute de
-donnee confirmee. Si tu changes de categorie dans Parametres et que le
-simulateur ne colle pas a un vrai recu, corrige la redevance de cette
-categorie dans TARIFS_PAR_CATEGORIE (bloc "MOTEUR TARIFAIRE" de index.html).
+Les tranches (prix ET seuils) viennent maintenant du document officiel CRSE
+"Grille tarifaire Senelec applicable a compter du 1er janvier 2026" - la
+source la plus fiable trouvee a ce jour. Confirme au passage que pour le
+Woyofal specifiquement, la 3eme tranche est toujours valorisee au prix de
+la 2eme (pas de 3eme prix distinct, contrairement a la facturation classique
+Usage Domestique/Professionnel).
+
+Seuils confirmes (1ere tranche / 2eme tranche, au-dela = 3eme) :
+- DPP : 0-150 / 150-250
+- DMP : 0-50  / 50-300
+- PPP et PMP : 0-100 / 100-500
+
+La redevance mensuelle (429 FCFA) et la taxe communale (2,5%) restent
+confirmees pour DPP uniquement. Un atelier presse officiel Senelec (juillet
+2024) precise que la redevance varie en fait selon le type de compteur
+(monophase ou triphase), pas directement selon DPP/DMP/PPP/PMP - le 429 FCFA
+vient de sources DPP (quasi toujours monophase). Un compteur DMP/PPP/PMP en
+triphase aurait probablement une redevance differente (aucun chiffre precis
+trouve). Si le simulateur ne colle pas a un vrai recu DMP/PPP/PMP, corrige
+la redevance de cette categorie dans TARIFS_PAR_CATEGORIE (bloc "MOTEUR
+TARIFAIRE" de index.html).
 
 La categorie tarifaire se choisit maintenant dans l'appli (icone reglages),
 plus besoin de modifier le code pour ca.
