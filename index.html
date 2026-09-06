@@ -785,6 +785,7 @@ let releveEnEditionId = null;
 let compteurs = [];
 let compteurActifId = null;
 let modeAffichage = "avance";
+let methodeEtude = "10j"; // etude temporaire : "10j" (actuelle) ou "3j" (a l'etude)
 let unsubAchats = null;
 let unsubReleves = null;
 let unsubCompteurs = null;
@@ -1502,9 +1503,34 @@ function renderDashboard() {
   const dernierReleve = releves[0];
 
   const intervalles = intervallesConsommation(releves, achats);
-  const taux = tauxMoyenJournalier(intervalles);
+  const taux = methodeEtude === "3j" ? tauxPondereADemiVie(intervalles, 3, new Date()) : tauxMoyenJournalier(intervalles);
   const prevision = joursRestantsEtDate(releves, achats, taux);
   const aAnomalie = intervalles.some((i) => i.anomalie);
+
+  // Etude en cours (temporaire) : ecart moyen accumule de chaque methode sur
+  // les releves qui ont deja une comparaison enregistree (voir ajouterReleve).
+  const relevesAvecEcart = releves.filter((r) => r.ecartDemiVie10j !== undefined);
+  const ecartMoyen10j = relevesAvecEcart.length > 0
+    ? relevesAvecEcart.reduce((s, r) => s + Math.abs(r.ecartDemiVie10j), 0) / relevesAvecEcart.length : null;
+  const ecartMoyen3j = relevesAvecEcart.length > 0
+    ? relevesAvecEcart.reduce((s, r) => s + Math.abs(r.ecartDemiVie3j), 0) / relevesAvecEcart.length : null;
+  const meilleureMethode = ecartMoyen10j !== null && ecartMoyen3j !== null
+    ? (ecartMoyen3j < ecartMoyen10j ? "3j" : (ecartMoyen10j < ecartMoyen3j ? "10j" : null)) : null;
+  const toggleEtudeHtml = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:5px;">
+          ${statHead("clock", "Etude : methode du rythme", "var(--warning-text)")}
+        </div>
+        ${meilleureMethode ? `<span style="font-size:9.5px;color:var(--success-text);font-weight:600;">${meilleureMethode} gagne pour l'instant</span>` : ""}
+      </div>
+      <div style="display:flex;background:var(--bg);border-radius:8px;padding:3px;">
+        <button type="button" id="methode-10j-btn" style="flex:1;text-align:center;padding:6px;border:none;border-radius:6px;font-size:11.5px;background:${methodeEtude === "10j" ? "var(--surface)" : "none"};font-weight:${methodeEtude === "10j" ? "600" : "400"};color:${methodeEtude === "10j" ? "var(--text-primary)" : "var(--text-muted)"};">10 jours (actuelle)</button>
+        <button type="button" id="methode-3j-btn" style="flex:1;text-align:center;padding:6px;border:none;border-radius:6px;font-size:11.5px;background:${methodeEtude === "3j" ? "var(--surface)" : "none"};font-weight:${methodeEtude === "3j" ? "600" : "400"};color:${methodeEtude === "3j" ? "var(--text-primary)" : "var(--text-muted)"};">3 jours (a l'etude)</button>
+      </div>
+      ${ecartMoyen10j !== null ? `<p style="font-size:9.5px;color:var(--text-muted);margin:6px 0 0;text-align:center;">Ecart moyen jusqu'ici : 10j = ${ecartMoyen10j.toFixed(2)} kWh · 3j = ${ecartMoyen3j.toFixed(2)} kWh</p>` : ""}
+    </div>
+  `;
 
   const besoinPrevu = calculerBesoinMois0(taux);
   let coutEstimeHtml = "";
@@ -1534,6 +1560,7 @@ function renderDashboard() {
   const style = PALIER_STYLE[palier];
 
   tabContent.innerHTML = `
+    ${toggleEtudeHtml}
     <div class="grid" style="margin-bottom:20px;">
       <div class="card" style="background:${style.bg};border-color:transparent;">
         ${statHead("wallet", "kWh achetés ce mois", style.text)}
@@ -1564,7 +1591,7 @@ function renderDashboard() {
     </div>
 
     <div class="card" style="margin-bottom:20px;">
-      <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Prévisions</p>
+      <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Prévisions <span style="font-size:10px;font-weight:400;color:var(--text-muted);">(methode ${methodeEtude})</span></p>
       ${releves.length < 2
         ? `<p style="font-size:13px;color:var(--text-secondary);margin:0;">Ajoute au moins 2 releves espacés dans le temps (onglet Releves) pour activer les prévisions.</p>`
         : `
@@ -1620,6 +1647,9 @@ function renderDashboard() {
       <div id="opt-result"></div>
     </div>
   `;
+
+  document.getElementById("methode-10j-btn").addEventListener("click", () => { methodeEtude = "10j"; render(); });
+  document.getElementById("methode-3j-btn").addEventListener("click", () => { methodeEtude = "3j"; render(); });
 
   // --- Optimiseur d'achat ---
   let optMode = "budget";
