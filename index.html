@@ -654,24 +654,63 @@ function intervallesConsommation(releves, achats) {
 
 function tauxMoyenJournalier(intervalles) {
   const valides = intervalles.filter((i) => !i.anomalie);
-  const totalConso = valides.reduce((s, i) => s + i.conso, 0);
-  const totalJours = valides.reduce((s, i) => s + i.jours, 0);
-  return totalJours > 0 ? totalConso / totalJours : null;
+  if (valides.length === 0) return null;
+  // Ponderation par fraicheur en plus de la ponderation par duree deja en
+  // place : un intervalle recent pese plus qu'un intervalle ancien, pour que
+  // le rythme suive une vraie tendance au lieu d'etre dilue par le debut de
+  // l'historique. Demi-vie de 10 jours : un intervalle vieux de 10 jours
+  // pese moitie moins qu'un intervalle d'aujourd'hui, 20 jours = un quart, etc.
+  const DEMI_VIE_JOURS = 10;
+  const decay = Math.pow(0.5, 1 / DEMI_VIE_JOURS);
+  const maintenant = new Date();
+  let totalConsoPondere = 0, totalJoursPondere = 0;
+  for (const iv of valides) {
+    const joursDepuisFin = Math.max(0, joursEntre(iv.fin, maintenant));
+    const poidsRecence = Math.pow(decay, joursDepuisFin);
+    totalConsoPondere += iv.conso * poidsRecence;
+    totalJoursPondere += iv.jours * poidsRecence;
+  }
+  return totalJoursPondere > 0 ? totalConsoPondere / totalJoursPondere : null;
 }
 
 function joursRestantsEtDate(releves, achats, taux) {
   if (!taux || taux <= 0 || releves.length === 0) return null;
+  const r = soldeEstimeAInstant(releves, achats, taux, new Date());
+  const joursRestants = Math.max(0, r.soldeEstime / taux);
+  const dateEstimee = new Date(Date.now() + joursRestants * 86400000);
+  return { soldeEstime: r.soldeEstime, joursRestants, dateEstimee };
+}
+
+// Meme formule que ci-dessus mais a un instant choisi plutot que "maintenant"
+// - sert a comparer plusieurs methodes de calcul du rythme entre elles, en
+// rejouant "qu'aurait-on predit a cet instant precis avec les donnees
+// disponibles avant lui".
+function soldeEstimeAInstant(releves, achats, taux, instant) {
   const sorted = [...releves].sort((a, b) => toDate(b.date) - toDate(a.date));
   const dernier = sorted[0];
-  const maintenant = new Date();
-  const joursDepuis = Math.max(0, joursEntre(dernier.date, maintenant));
+  const joursDepuis = Math.max(0, joursEntre(dernier.date, instant));
   const achatsDepuis = achats
-    .filter((a) => toDate(a.date) > toDate(dernier.date))
+    .filter((a) => toDate(a.date) > toDate(dernier.date) && toDate(a.date) <= instant)
     .reduce((s, a) => s + (a.kwh || 0), 0);
   const soldeEstime = dernier.soldeKwh + achatsDepuis - taux * joursDepuis;
-  const joursRestants = Math.max(0, soldeEstime / taux);
-  const dateEstimee = new Date(maintenant.getTime() + joursRestants * 86400000);
-  return { soldeEstime: Math.max(0, soldeEstime), joursRestants, dateEstimee };
+  return { soldeEstime: Math.max(0, soldeEstime) };
+}
+
+// Variante du rythme pondere par recence/duree avec une demi-vie choisie et
+// un instant de reference explicite (au lieu de new Date() en interne) -
+// pour comparer plusieurs demi-vies entre elles sur les memes donnees.
+function tauxPondereADemiVie(intervalles, demiVieJours, instant) {
+  const valides = intervalles.filter((i) => !i.anomalie);
+  if (valides.length === 0) return null;
+  const decay = Math.pow(0.5, 1 / demiVieJours);
+  let totalConsoPondere = 0, totalJoursPondere = 0;
+  for (const iv of valides) {
+    const joursDepuisFin = Math.max(0, joursEntre(iv.fin, instant));
+    const poidsRecence = Math.pow(decay, joursDepuisFin);
+    totalConsoPondere += iv.conso * poidsRecence;
+    totalJoursPondere += iv.jours * poidsRecence;
+  }
+  return totalJoursPondere > 0 ? totalConsoPondere / totalJoursPondere : null;
 }
 
 // Regroupe les intervalles bruts (releve a releve) en moyennes par jour
@@ -1108,9 +1147,29 @@ async function supprimerAchat(id) {
   await deleteDoc(doc(db, "users", currentUser.uid, "compteurs", compteurActifId, "achats", id));
 }
 async function ajouterReleve({ soldeKwh, date }) {
-  await addDoc(collection(db, "users", currentUser.uid, "compteurs", compteurActifId, "releves"), {
-    soldeKwh, date: Timestamp.fromDate(new Date(date)), createdAt: Timestamp.now(),
-  });
+  const nouvelleDate = new Date(date);
+  const doc_ = { soldeKwh, date: Timestamp.fromDate(nouvelleDate), createdAt: Timestamp.now() };
+
+  // Etude en cours (temporaire) : avant d'ajouter ce releve, on enregistre ce
+  // que chaque variante du rythme (demi-vie 10j actuelle vs 3j a l'etude)
+  // aurait predit comme solde a cet instant, avec les donnees disponibles
+  // avant lui - pour comparer les deux methodes sur plusieurs semaines
+  // avant de choisir laquelle garder definitivement.
+  if (releves.length >= 2) {
+    const intervallesAvant = intervallesConsommation(releves, achats);
+    const taux10j = tauxPondereADemiVie(intervallesAvant, 10, nouvelleDate);
+    const taux3j = tauxPondereADemiVie(intervallesAvant, 3, nouvelleDate);
+    if (taux10j && taux3j) {
+      const pred10j = soldeEstimeAInstant(releves, achats, taux10j, nouvelleDate).soldeEstime;
+      const pred3j = soldeEstimeAInstant(releves, achats, taux3j, nouvelleDate).soldeEstime;
+      // Signe : positif = la methode avait sous-estime la consommation
+      // (predit plus de solde restant qu'il n'y en avait vraiment).
+      doc_.ecartDemiVie10j = Math.round((soldeKwh - pred10j) * 100) / 100;
+      doc_.ecartDemiVie3j = Math.round((soldeKwh - pred3j) * 100) / 100;
+    }
+  }
+
+  await addDoc(collection(db, "users", currentUser.uid, "compteurs", compteurActifId, "releves"), doc_);
 }
 async function modifierReleve(id, { soldeKwh, date }) {
   await updateDoc(doc(db, "users", currentUser.uid, "compteurs", compteurActifId, "releves", id), {
@@ -1176,13 +1235,15 @@ function exporterAchatsCSV() {
 }
 
 function exporterRelevesCSV() {
-  const lignes = ["Date;Heure;Solde kWh restant"];
+  const lignes = ["Date;Heure;Solde kWh restant;Ecart methode 10j;Ecart methode 3j"];
   releves.forEach((r) => {
     const d = toDate(r.date);
     lignes.push([
       d.toLocaleDateString("fr-FR"),
       d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
       String(r.soldeKwh).replace(".", ","),
+      r.ecartDemiVie10j !== undefined ? String(r.ecartDemiVie10j).replace(".", ",") : "",
+      r.ecartDemiVie3j !== undefined ? String(r.ecartDemiVie3j).replace(".", ",") : "",
     ].join(";"));
   });
   telechargerFichier(`woyofal-releves-${nomCompteurPourFichier()}-${todayStr()}.csv`, "\uFEFF" + lignes.join("\r\n"), "text/csv;charset=utf-8;");
