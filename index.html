@@ -801,7 +801,7 @@ function graphiqueConsommationSVG(intervalles) {
     const y = height - h - padBas;
     const color = "#1B3A52";
     const label = jr.date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
-    return `<text x="${x + w / 2}" y="${y - 4}" font-size="9" fill="var(--text-secondary)" text-anchor="middle">${taux.toFixed(1)}</text>
+    return `<text x="${x + w / 2}" y="${y - 4}" font-size="9" fill="var(--text-secondary)" text-anchor="middle">${taux.toFixed(2)}</text>
       <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${color}" rx="2"></rect>
       <text x="${x + w / 2}" y="${height - 4}" font-size="9" fill="#8A9199" text-anchor="middle">${label}</text>`;
   }).join("");
@@ -1605,7 +1605,7 @@ function renderDashboard() {
       <div class="card">
         ${statHead("gauge", "Solde compteur")}
         ${prevision
-          ? `${statValue(Math.round(prevision.soldeEstime * 10) / 10, "kWh")}<p style="font-size:11px;margin:6px 0 0;color:var(--text-muted);">Estime (achats inclus)</p>`
+          ? `${statValue(prevision.soldeEstime.toFixed(2), "kWh")}<p style="font-size:11px;margin:6px 0 0;color:var(--text-muted);">Estime (achats inclus)</p>`
           : dernierReleve
             ? `${statValue(dernierReleve.soldeKwh, "kWh")}<p style="font-size:11px;margin:6px 0 0;color:var(--text-muted);">Dernier releve</p>`
             : statValue("-", "")
