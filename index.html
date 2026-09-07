@@ -324,8 +324,48 @@ function kwhRestantAvantProchainPalier(cumulKwh, tarifs) {
 // deux fonctions ci-dessous remplissent les tranches disponibles par
 // prix croissant (les moins cheres d'abord, tous mois confondus).
 // ---------------------------------------------------------------
-function genererSlotsMultiMois(nMois, cumulActuel, tarifs, besoinMois0) {
-  besoinMois0 = besoinMois0 || 0;
+// Besoin physique réel, mois par mois (independant des tranches) : ce qu'il
+// faut avoir achete, cumulativement, pour ne jamais tomber a sec avant la
+// marge de securite de CHAQUE mois du plan - pas seulement le premier.
+// Chaque besoin est incremental (ce qui reste a couvrir une fois les mois
+// precedents deja garantis), jamais recalcule depuis zero pour chaque mois.
+const JOURS_MARGE_SECURITE = 5;
+
+function dateLimiteMois0() {
+  const maintenant = new Date();
+  return new Date(maintenant.getFullYear(), maintenant.getMonth() + 1, 1 + JOURS_MARGE_SECURITE);
+}
+
+function dateLimiteMois(m) {
+  const maintenant = new Date();
+  return new Date(maintenant.getFullYear(), maintenant.getMonth() + m + 1, 1 + JOURS_MARGE_SECURITE);
+}
+
+function calculerBesoinsCumulesParMois(rythme, nMois) {
+  if (!rythme || rythme <= 0) return Array(nMois).fill(0);
+  const maintenant = new Date();
+  const prevision = joursRestantsEtDate(releves, achats, rythme);
+  const soldeActuel = prevision ? prevision.soldeEstime : (releves[0] ? releves[0].soldeKwh : 0);
+  const besoins = [];
+  let dejaCouvert = 0;
+  for (let m = 0; m < nMois; m++) {
+    const joursACouvrir = Math.max(0, joursEntre(maintenant, dateLimiteMois(m)));
+    const besoinCumulatifTotal = Math.max(0, rythme * joursACouvrir - soldeActuel);
+    const besoinIncremental = Math.max(0, besoinCumulatifTotal - dejaCouvert);
+    besoins.push(besoinIncremental);
+    dejaCouvert += besoinIncremental;
+  }
+  return besoins;
+}
+
+// Reste pour compatibilite (affichage de la date/du besoin du mois en cours
+// seul) - equivalent au premier element de calculerBesoinsCumulesParMois.
+function calculerBesoinMois0(rythme) {
+  return calculerBesoinsCumulesParMois(rythme, 1)[0];
+}
+
+function genererSlotsMultiMois(nMois, cumulActuel, tarifs, rythme) {
+  const besoinsParMois = calculerBesoinsCumulesParMois(rythme, nMois);
   const slots = [];
   for (let m = 0; m < nMois; m++) {
     let cum = m === 0 ? cumulActuel : 0;
@@ -340,25 +380,29 @@ function genererSlotsMultiMois(nMois, cumulActuel, tarifs, besoinMois0) {
   }
   slots.sort((a, b) => a.prixUnitaire - b.prixUnitaire);
 
-  if (besoinMois0 <= 0.01) return slots.map((s) => ({ ...s, priorite: 1 }));
+  if (!besoinsParMois.some((b) => b > 0.01)) return slots.map((s) => ({ ...s, priorite: nMois }));
 
-  // Le besoin physique réel du mois 0 (solde compteur + rythme) est isolé
-  // en priorite absolue, puise dans les tranches les moins cheres DU MOIS 0
-  // (dans l'ordre ou elles apparaissent déjà triees par prix) - avant que
-  // le reste ne rivalise normalement avec les autres mois sur le prix seul.
-  let besoinRestant = besoinMois0;
+  // Chaque mois a son propre besoin garanti, dans l'ordre chronologique
+  // (priorite = numero du mois : le mois 0 passe avant le mois 1, qui passe
+  // avant le mois 2...) - impossible de financer un mois lointain avant que
+  // les mois plus proches ne soient eux-memes couverts. Pris dans les
+  // tranches les moins cheres DE CE MOIS. Le surplus de chaque mois, une
+  // fois son besoin rempli, rivalise ensuite librement sur le prix, tous
+  // mois confondus, a la priorite la plus basse (= nMois).
+  const besoinsRestants = besoinsParMois.slice();
   const resultat = [];
   for (const slot of slots) {
-    if (slot.mois === 0 && besoinRestant > 0.01) {
-      const partGarantie = Math.min(slot.capacite, besoinRestant);
-      resultat.push({ mois: 0, capacite: partGarantie, prixUnitaire: slot.prixUnitaire, priorite: 0 });
-      besoinRestant -= partGarantie;
+    const besoinCeMois = besoinsRestants[slot.mois] || 0;
+    if (besoinCeMois > 0.01) {
+      const partGarantie = Math.min(slot.capacite, besoinCeMois);
+      resultat.push({ mois: slot.mois, capacite: partGarantie, prixUnitaire: slot.prixUnitaire, priorite: slot.mois });
+      besoinsRestants[slot.mois] -= partGarantie;
       const resteCapacite = slot.capacite - partGarantie;
       if (resteCapacite > 0.01) {
-        resultat.push({ mois: 0, capacite: resteCapacite, prixUnitaire: slot.prixUnitaire, priorite: 1 });
+        resultat.push({ mois: slot.mois, capacite: resteCapacite, prixUnitaire: slot.prixUnitaire, priorite: nMois });
       }
     } else {
-      resultat.push({ ...slot, priorite: 1 });
+      resultat.push({ ...slot, priorite: nMois });
     }
   }
   resultat.sort((a, b) => a.priorite - b.priorite || a.prixUnitaire - b.prixUnitaire);
@@ -379,11 +423,12 @@ function redevancesParMois(nMois, premierMoisEstPremier, tarifs) {
 // n'aide pas (redevance payee pour rien).
 const MONTANT_MIN_ACHAT = 1000; // Woyofal vendu a partir de 1000 F (grille officielle Senelec)
 
-function planifierParBudget(budget, nMois, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0, moisExclus) {
+function planifierParBudget(budget, nMois, cumulActuel, premierMoisEstPremier, tarifs, rythme, moisExclus) {
   tarifs = tarifs || getTarifsActuels();
   moisExclus = moisExclus || [];
+  const besoinsParMois = calculerBesoinsCumulesParMois(rythme, nMois);
   const redevances = redevancesParMois(nMois, premierMoisEstPremier, tarifs);
-  const slots = genererSlotsMultiMois(nMois, cumulActuel, tarifs, besoinMois0).filter((s) => !moisExclus.includes(s.mois));
+  const slots = genererSlotsMultiMois(nMois, cumulActuel, tarifs, rythme).filter((s) => !moisExclus.includes(s.mois));
   const detail = Array.from({ length: nMois }, () => ({ montant: 0, kwh: 0 }));
   const redevancePayee = Array(nMois).fill(false);
   let budgetRestant = budget;
@@ -420,26 +465,34 @@ function planifierParBudget(budget, nMois, cumulActuel, premierMoisEstPremier, t
   // proposer un achat théorique impossible a faire dans la vraie vie.
   const moisSousMinimum = detail.findIndex((d) => d.montant > 0 && d.montant < MONTANT_MIN_ACHAT);
   if (moisSousMinimum !== -1 && moisExclus.length < nMois) {
-    return planifierParBudget(budget, nMois, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0, [...moisExclus, moisSousMinimum]);
+    return planifierParBudget(budget, nMois, cumulActuel, premierMoisEstPremier, tarifs, rythme, [...moisExclus, moisSousMinimum]);
   }
+
+  // Mois dont le besoin physique reel (tenir jusqu'a sa propre marge de
+  // securite) n'a pas ete entierement couvert - jamais accepte par
+  // planifierLePlusEconomique pour faire grandir un plan.
+  const moisSousFinances = besoinsParMois
+    .map((besoin, m) => (besoin > 0.01 && detail[m].kwh < besoin - 0.5 ? m : null))
+    .filter((m) => m !== null);
 
   const detailFinal = detail.filter((d) => d.montant > 0).map((d) => ({
     montant: Math.round(d.montant), kwh: Math.round(d.kwh * 100) / 100,
   }));
   const redevanceTotale = redevances.reduce((a, b, i) => a + (redevancePayee[i] ? b : 0), 0);
-  const manqueMois0 = Math.round(Math.max(0, (besoinMois0 || 0) - detail[0].kwh) * 100) / 100;
+  const manqueMois0 = Math.round(Math.max(0, (besoinsParMois[0] || 0) - detail[0].kwh) * 100) / 100;
 
   if (kwhTotal <= 0) return { erreur: "budget_insuffisant_redevances", redevanceTotale };
-  return { kwhTotal: Math.round(kwhTotal * 100) / 100, redevanceTotale, detail: detailFinal, erreur: null, manqueMois0, nbMoisOuverts: detailFinal.length };
+  return { kwhTotal: Math.round(kwhTotal * 100) / 100, redevanceTotale, detail: detailFinal, erreur: null, manqueMois0, moisSousFinances, nbMoisOuverts: detailFinal.length };
 }
 
 // kWh cible -> minimiser le montant total. Meme principe : un mois qui ne
 // sert a rien n'est jamais ouvert (sa redevance n'est jamais payee).
-function planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0, moisExclus) {
+function planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, tarifs, rythme, moisExclus) {
   tarifs = tarifs || getTarifsActuels();
   moisExclus = moisExclus || [];
+  const besoinsParMois = calculerBesoinsCumulesParMois(rythme, nMois);
   const redevances = redevancesParMois(nMois, premierMoisEstPremier, tarifs);
-  const slots = genererSlotsMultiMois(nMois, cumulActuel, tarifs, besoinMois0).filter((s) => !moisExclus.includes(s.mois));
+  const slots = genererSlotsMultiMois(nMois, cumulActuel, tarifs, rythme).filter((s) => !moisExclus.includes(s.mois));
   const detail = Array.from({ length: nMois }, () => ({ montant: 0, kwh: 0 }));
   const redevancePayee = Array(nMois).fill(false);
   let kwhRestant = kwhCible;
@@ -460,41 +513,48 @@ function planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, ta
 
   const moisSousMinimum = detail.findIndex((d) => d.montant > 0 && d.montant < MONTANT_MIN_ACHAT);
   if (moisSousMinimum !== -1 && moisExclus.length < nMois) {
-    return planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0, [...moisExclus, moisSousMinimum]);
+    return planifierParKwh(kwhCible, nMois, cumulActuel, premierMoisEstPremier, tarifs, rythme, [...moisExclus, moisSousMinimum]);
   }
+
+  const moisSousFinances = besoinsParMois
+    .map((besoin, m) => (besoin > 0.01 && detail[m].kwh < besoin - 0.5 ? m : null))
+    .filter((m) => m !== null);
 
   const detailFinal = detail.filter((d) => d.montant > 0).map((d) => ({
     montant: Math.round(d.montant), kwh: Math.round(d.kwh * 100) / 100,
   }));
   const redevanceTotale = redevances.reduce((a, b, i) => a + (redevancePayee[i] ? b : 0), 0);
   const montantTotal = detailFinal.reduce((s, d) => s + d.montant, 0);
-  const manqueMois0 = Math.round(Math.max(0, (besoinMois0 || 0) - detail[0].kwh) * 100) / 100;
+  const manqueMois0 = Math.round(Math.max(0, (besoinsParMois[0] || 0) - detail[0].kwh) * 100) / 100;
 
-  return { montantTotal, redevanceTotale, detail: detailFinal, erreur: null, manqueMois0, nbMoisOuverts: detailFinal.length };
+  return { montantTotal, redevanceTotale, detail: detailFinal, erreur: null, manqueMois0, moisSousFinances, nbMoisOuverts: detailFinal.length };
 }
 
 // ---------------------------------------------------------------
 // "LE PLUS ECONOMIQUE" - nombre de mois trouve automatiquement
 // Grace au remplissage "paresseux" (un mois n'est ouvert, et sa redevance
 // facturee, que s'il sert vraiment), augmenter nMois ne peut jamais degrader
-// le résultat - donc on augmente tant que ca ameliore, et on s'arrête des
-// que ce n'est plus le cas. Pas de plafond fixe cote metier, juste une
-// sécurité anti-boucle et un seuil d'avertissement pour un plan trop étalé.
+// le résultat économique brut - mais un mois supplementaire n'est accepte
+// QUE si son propre besoin physique (tenir jusqu'a sa marge de securite)
+// est entierement couvert par le budget/kWh disponible. Un plan qui
+// tomberait a sec avant le prochain achat prevu n'est jamais propose, meme
+// s'il maximiserait le kWh total sur le papier.
 // A résultat économique égal (a 0.01 pres), on depage par : moins de mois
 // ouverts, puis moins d'achats - hierarchie validee par revue croisee.
 // ---------------------------------------------------------------
 const PLAFOND_SECURITE_MOIS = 24;
 const SEUIL_AVERTISSEMENT_MOIS = 4;
 
-function planifierLePlusEconomique(mode, valeur, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0) {
+function planifierLePlusEconomique(mode, valeur, cumulActuel, premierMoisEstPremier, tarifs, rythme) {
   const planifier = mode === "budget" ? planifierParBudget : planifierParKwh;
   const scoreEco = (r) => (mode === "budget" ? r.kwhTotal : -r.montantTotal);
 
-  let meilleur = planifier(valeur, 1, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0);
+  let meilleur = planifier(valeur, 1, cumulActuel, premierMoisEstPremier, tarifs, rythme);
   let n = 1;
   while (n < PLAFOND_SECURITE_MOIS) {
-    const candidat = planifier(valeur, n + 1, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0);
+    const candidat = planifier(valeur, n + 1, cumulActuel, premierMoisEstPremier, tarifs, rythme);
     if (candidat.erreur) break;
+    if (candidat.moisSousFinances && candidat.moisSousFinances.length > 0) break;
     const diff = scoreEco(candidat) - scoreEco(meilleur);
     if (diff > 0.01) {
       meilleur = candidat;
@@ -508,40 +568,15 @@ function planifierLePlusEconomique(mode, valeur, cumulActuel, premierMoisEstPrem
   return meilleur;
 }
 
-// Besoin physique réel du mois en cours (independant des tranches) : ce
-// qu'il faut acheter en plus pour ne pas tomber a sec avant la fin du mois
-// calendaire, compte tenu de ce qui est déjà sur le compteur. Sans rythme
-// connu, aucune garantie n'est possible - on retombe sur l'optimisation pure.
-const JOURS_MARGE_SECURITE = 5;
-
-function dateLimiteMois0() {
-  const maintenant = new Date();
-  return new Date(maintenant.getFullYear(), maintenant.getMonth() + 1, 1 + JOURS_MARGE_SECURITE);
-}
-
-function calculerBesoinMois0(rythme) {
-  if (!rythme || rythme <= 0) return 0;
-  const maintenant = new Date();
-  // Couvre jusqu'au JOURS_MARGE_SECURITE du mois suivant, pas juste jusqu'au
-  // 30/31 - une marge pour ne pas tomber a sec si la conso réelle depasse
-  // un peu la moyenne sur quelques jours, ou avant d'avoir eu le temps de
-  // faire le prochain achat.
-  const dateCible = dateLimiteMois0();
-  const joursACouvrir = Math.max(0, joursEntre(maintenant, dateCible));
-  const prevision = joursRestantsEtDate(releves, achats, rythme);
-  const soldeActuel = prevision ? prevision.soldeEstime : (releves[0] ? releves[0].soldeKwh : 0);
-  return Math.max(0, rythme * joursACouvrir - soldeActuel);
-}
-
 // Compare "utiliser la capacite restante du mois en cours" contre "sauter
 // entièrement ce mois et tout acheter a partir du mois prochain". Les deux
 // peuvent donner le même total (même tarif partout) - dans ce cas, on
 // prefere celle qui demande le moins d'achats. Uniquement pertinent quand
 // le mois en cours n'a aucun besoin réel a couvrir (sinon le sauter serait
 // dangereux, pas juste sous-optimal).
-function planifierMeilleureStrategie(mode, valeur, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0) {
-  const optionA = planifierLePlusEconomique(mode, valeur, cumulActuel, premierMoisEstPremier, tarifs, besoinMois0);
-  if (besoinMois0 > 0.01) return optionA;
+function planifierMeilleureStrategie(mode, valeur, cumulActuel, premierMoisEstPremier, tarifs, rythme) {
+  const optionA = planifierLePlusEconomique(mode, valeur, cumulActuel, premierMoisEstPremier, tarifs, rythme);
+  if (calculerBesoinMois0(rythme) > 0.01) return optionA;
 
   const optionB = planifierLePlusEconomique(mode, valeur, 0, true, tarifs, 0);
   if (optionA.erreur) return optionB.erreur ? optionA : { ...optionB, decalageMois: 1 };
@@ -1766,9 +1801,9 @@ function renderDashboard() {
     const facteur = facteurCorrection(achats);
 
     const planifier = optMode === "budget" ? planifierParBudget : planifierParKwh;
-    const besoinMois0 = calculerBesoinMois0(tauxEffectif);
-    const rapide = appliquerFacteurCorrection(planifier(val, 1, cumul, premier, tarifsActuels, besoinMois0), facteur, optMode);
-    const economique = appliquerFacteurCorrection(planifierMeilleureStrategie(optMode, val, cumul, premier, tarifsActuels, besoinMois0), facteur, optMode);
+    const besoinMois0 = calculerBesoinMois0(tauxEffectif); // pour l'affichage (note/avertissement) uniquement
+    const rapide = appliquerFacteurCorrection(planifier(val, 1, cumul, premier, tarifsActuels, tauxEffectif), facteur, optMode);
+    const economique = appliquerFacteurCorrection(planifierMeilleureStrategie(optMode, val, cumul, premier, tarifsActuels, tauxEffectif), facteur, optMode);
     const nbMoisEconomique = economique.erreur ? 1 : economique.detail.length;
 
     function afficherOption(r) {
