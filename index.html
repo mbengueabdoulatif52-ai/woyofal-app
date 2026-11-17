@@ -784,19 +784,24 @@ function plageRythme(intervalles, relevesListe) {
   return { bas: quantile(0.1), haut: quantile(0.9) };
 }
 
-function fourchettePrevision(prevision, taux, plage) {
+// L'incertitude se mesure depuis le DERNIER RELEVE REEL : le solde actuel
+// n'est qu'une estimation si aucun releve n'a ete fait depuis plusieurs jours,
+// donc la plage s'elargit avec l'anciennete du releve.
+function fourchettePrevision(prevision, taux, plage, relevesListe, achatsListe) {
   if (!prevision || !plage || !taux) return null;
-  const solde = prevision.soldeEstime;
-  const horizon = Math.max(1, prevision.joursRestants);
+  const maintenant = Date.now();
+  const dernier = [...relevesListe].sort((a, b) => toDate(b.date) - toDate(a.date))[0];
+  const tRel = toDate(dernier.date).getTime();
+  const achatsDepuis = achatsListe.filter((a) => toDate(a.date).getTime() > tRel && toDate(a.date).getTime() <= maintenant)
+    .reduce((s, a) => s + (a.kwh || 0), 0);
+  const stock = dernier.soldeKwh + achatsDepuis;          // kWh disponibles depuis le dernier releve
+  const horizon = Math.max(1, stock / taux);               // jours ecoules + jours restants
   const k = 1 / Math.sqrt(horizon);
   const rapide = taux + Math.max(0, plage.haut - taux) * k;
   const lent = Math.max(0.1, taux - Math.max(0, taux - plage.bas) * k);
-  const maintenant = Date.now();
-  return {
-    tot: new Date(maintenant + (solde / rapide) * 86400000),
-    tard: new Date(maintenant + (solde / lent) * 86400000),
-    probable: prevision.dateEstimee,
-  };
+  const tot = Math.max(maintenant, tRel + (stock / rapide) * 86400000);
+  const tard = Math.max(tot + 3600000, tRel + (stock / lent) * 86400000);
+  return { tot: new Date(tot), tard: new Date(tard), probable: prevision.dateEstimee };
 }
 
 function libelleMoment(d) {
@@ -860,7 +865,7 @@ function blocPrevisionHtml(f, prevision, taux, plage, cout) {
       ${pastille("#EAF3DE", "sûr")}${pastille("#FAEEDA", "peut s'épuiser")}${pastille("#F7C1C1", "le plus probable")}
     </div>
     <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">${action}</div>
-    <p style="font-size:11px;color:var(--text-muted);margin:8px 0 14px;">Rythme ${taux.toFixed(1).replace(".", ",")} kWh/j (${plage.bas.toFixed(1).replace(".", ",")} à ${plage.haut.toFixed(1).replace(".", ",")} selon les jours) · solde estimé ${prevision.soldeEstime.toFixed(1).replace(".", ",")} kWh</p>
+    <p style="font-size:11px;color:var(--text-muted);margin:8px 0 14px;">Rythme ${taux.toFixed(1).replace(".", ",")} kWh/j (${plage.bas.toFixed(1).replace(".", ",")} à ${plage.haut.toFixed(1).replace(".", ",")} selon les jours)</p>
   `;
 }
 
@@ -1701,7 +1706,7 @@ function renderDashboard() {
   const taux = tauxMoyenJournalier(intervalles);
   const prevision = joursRestantsEtDate(releves, achats, taux);
   const plage = plageRythme(intervalles, releves);
-  const fourchette = fourchettePrevision(prevision, taux, plage);
+  const fourchette = fourchettePrevision(prevision, taux, plage, releves, achats);
   const aAnomalie = intervalles.some((i) => i.anomalie);
 
   const besoinPrevu = calculerBesoinMois0(taux);
@@ -1737,15 +1742,15 @@ function renderDashboard() {
     <div class="grid" style="margin-bottom:20px;">
       <div class="card" style="background:${style.bg};border-color:transparent;">
         ${statHead("wallet", "kWh achetés ce mois", style.text)}
-        ${statValue(cumul.toFixed(1), "kWh", style.text)}
+        ${statValue(cumul.toFixed(1).replace(".", ","), "kWh", style.text)}
         <p style="font-size:11px;margin:6px 0 0;color:${style.text};">${style.label}</p>
       </div>
       <div class="card">
         ${statHead("gauge", "Solde compteur")}
         ${prevision
-          ? `${statValue(prevision.soldeEstime.toFixed(2), "kWh")}<p style="font-size:11px;margin:6px 0 0;color:var(--text-muted);">Estime (achats inclus)</p>`
+          ? `${statValue(prevision.soldeEstime.toFixed(1).replace(".", ","), "kWh")}<p style="font-size:11px;margin:6px 0 0;color:var(--text-muted);">Estimé (achats inclus)</p>`
           : dernierReleve
-            ? `${statValue(dernierReleve.soldeKwh, "kWh")}<p style="font-size:11px;margin:6px 0 0;color:var(--text-muted);">Dernier releve</p>`
+            ? `${statValue(String(dernierReleve.soldeKwh).replace(".", ","), "kWh")}<p style="font-size:11px;margin:6px 0 0;color:var(--text-muted);">Dernier releve</p>`
             : statValue("-", "")
         }
       </div>
@@ -1758,7 +1763,7 @@ function renderDashboard() {
         <div style="position:absolute;left:${(t2max / jaugeMax) * 100}%;top:0;bottom:0;width:1px;background:var(--bg);"></div>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:13px;">
-        <span style="font-weight:600;color:${style.text};">${cumul.toFixed(1)} kWh</span>
+        <span style="font-weight:600;color:${style.text};">${cumul.toFixed(1).replace(".", ",")} kWh</span>
         <span style="color:var(--text-muted);">${restant !== null ? Math.round(restant) + " kWh avant la tranche " + (palier + 1) : style.label}</span>
       </div>
     </div>
