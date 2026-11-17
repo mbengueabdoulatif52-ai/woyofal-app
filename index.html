@@ -755,9 +755,22 @@ function tauxMoyenJournalier(intervalles) {
 // avec l'horizon (sur 4 jours, les bons et mauvais jours se compensent en
 // partie) : facteur 1/racine(horizon).
 // ---------------------------------------------------------------
-function plageRythme(intervalles) {
+// Valeurs « conso d'hier » (code 813) : une vraie journee, sous forme d'intervalle d'un jour
+function joursCompteur(releves) {
+  return releves.filter((r) => r.consoHier != null && r.consoHier >= 0).map((r) => {
+    const d = toDate(r.date);
+    const jour = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
+    return { jour, kwh: r.consoHier };
+  });
+}
+
+function plageRythme(intervalles, relevesListe) {
   const maintenant = new Date();
   let courts = intervalles.filter((iv) => !iv.anomalie && iv.jours >= 0.4 && iv.jours <= 2.5);
+  for (const jc of joursCompteur(relevesListe || [])) {
+    const fin = new Date(jc.jour); fin.setDate(fin.getDate() + 1);
+    courts.push({ jours: 1, tauxJournalier: jc.kwh, fin, anomalie: false });
+  }
   const recents = courts.filter((iv) => joursEntre(iv.fin, maintenant) <= 60);
   if (recents.length >= 5) courts = recents;
   if (courts.length < 5) return null;
@@ -887,30 +900,72 @@ function agregerParJour(intervalles) {
   return jours;
 }
 
+// Construit les jours du graphique : « mesure » (periodes courtes), « moyenne »
+// (periode longue : une seule barre large), « compteur » (code 813, prioritaire).
+const SEUIL_PERIODE_LONGUE = 2.5;
+function joursGraphique(intervalles, relevesListe) {
+  const valides = intervalles.filter((iv) => !iv.anomalie);
+  const cle = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  const carte = new Map();
+  for (const jr of agregerParJour(valides.filter((iv) => iv.jours <= SEUIL_PERIODE_LONGUE))) {
+    carte.set(cle(jr.date), { date: jr.date, taux: jr.tauxJournalier, type: "mesure" });
+  }
+  valides.forEach((iv, idx) => {
+    if (iv.jours <= SEUIL_PERIODE_LONGUE) return;
+    const d0 = toDate(iv.debut), d1 = toDate(iv.fin);
+    for (let j = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate()); j <= d1; j.setDate(j.getDate() + 1)) {
+      const k = cle(j);
+      if (!carte.has(k)) carte.set(k, { date: new Date(j), taux: iv.tauxJournalier, type: "moyenne", groupe: idx });
+    }
+  });
+  for (const jc of joursCompteur(relevesListe || [])) {
+    carte.set(cle(jc.jour), { date: jc.jour, taux: jc.kwh, type: "compteur" });
+  }
+  return [...carte.values()].sort((a, b) => a.date - b.date);
+}
+
 function graphiqueConsommationSVG(intervalles) {
-  if (intervalles.length < 2) {
-    return `<p style="font-size:13px;color:var(--text-secondary);margin:0;">Ajoute encore un relevé pour voir l'evolution dans le temps (un seul intervalle ne donne rien a comparer).</p>`;
+  const msgVide = `<p style="font-size:13px;color:var(--text-secondary);margin:0;">Ajoute encore un relevé pour voir l'evolution dans le temps (un seul intervalle ne donne rien a comparer).</p>`;
+  const tous = joursGraphique(intervalles, releves);
+  if (tous.length < 2) return msgVide;
+  const derniers = tous.slice(-8);
+  // Regroupe les jours consecutifs d'une meme periode longue en une seule barre
+  const blocs = [];
+  for (const jr of derniers) {
+    const prec = blocs[blocs.length - 1];
+    if (jr.type === "moyenne" && prec && prec.type === "moyenne" && prec.groupe === jr.groupe) { prec.n++; prec.fin = jr.date; }
+    else blocs.push({ ...jr, n: 1, fin: jr.date });
   }
-  const jours = agregerParJour(intervalles);
-  if (jours.length < 2) {
-    return `<p style="font-size:13px;color:var(--text-secondary);margin:0;">Ajoute encore un relevé pour voir l'evolution dans le temps (un seul intervalle ne donne rien a comparer).</p>`;
-  }
-  const derniers = jours.slice(-8);
-  const maxTaux = Math.max(...derniers.map((j) => Math.max(0, j.tauxJournalier)), 0.1);
-  const width = 300, height = 105, padHaut = 14, padBas = 16, barWidth = width / derniers.length;
-  const bars = derniers.map((jr, idx) => {
-    const taux = Math.max(0, jr.tauxJournalier);
+  const maxTaux = Math.max(...blocs.map((b) => Math.max(0, b.taux)), 0.1);
+  const width = 300, height = 112, padHaut = 14, padBas = 16, slot = width / derniers.length;
+  const fmt = (d) => d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+  let i = 0;
+  const bars = blocs.map((bl) => {
+    const taux = Math.max(0, bl.taux);
     const h = Math.max(2, (taux / maxTaux) * (height - padHaut - padBas));
-    const x = idx * barWidth + barWidth * 0.15;
-    const w = barWidth * 0.7;
-    const y = height - h - padBas;
-    const color = "#1B3A52";
-    const label = jr.date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
-    return `<text x="${x + w / 2}" y="${y - 4}" font-size="9" fill="var(--text-secondary)" text-anchor="middle">${taux.toFixed(2)}</text>
-      <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${color}" rx="2"></rect>
-      <text x="${x + w / 2}" y="${height - 4}" font-size="9" fill="#8A9199" text-anchor="middle">${label}</text>`;
+    const x = i * slot + slot * 0.15, w = slot * bl.n - slot * 0.3, y = height - h - padBas;
+    i += bl.n;
+    const valeur = taux.toFixed(1).replace(".", ",");
+    if (bl.type === "moyenne" && bl.n > 1) {
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2" fill="#B5D4F4" stroke="#378ADD" stroke-dasharray="4 3"></rect>
+        <text x="${x + w / 2}" y="${y + h / 2 - 1}" font-size="9" fill="#0C447C" text-anchor="middle">moy. ${valeur}</text>
+        <text x="${x + w / 2}" y="${y + h / 2 + 10}" font-size="9" fill="#0C447C" text-anchor="middle">sur ${bl.n} jours</text>
+        <text x="${x + w / 2}" y="${height - 4}" font-size="9" fill="#8A9199" text-anchor="middle">${fmt(bl.date)} → ${fmt(bl.fin)}</text>`;
+    }
+    const couleur = bl.type === "compteur" ? "#3AA31C" : bl.type === "moyenne" ? "#B5D4F4" : "#1B3A52";
+    const trait = bl.type === "moyenne" ? ` stroke="#378ADD" stroke-dasharray="3 2"` : "";
+    return `<text x="${x + w / 2}" y="${y - 4}" font-size="9" fill="var(--text-secondary)" text-anchor="middle">${valeur}</text>
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${couleur}" rx="2"${trait}></rect>
+      <text x="${x + w / 2}" y="${height - 4}" font-size="9" fill="#8A9199" text-anchor="middle">${fmt(bl.date)}</text>`;
   }).join("");
-  return `<svg viewBox="0 0 ${width} ${height}" style="width:100%;height:auto;">${bars}</svg>`;
+  const types = new Set(blocs.map((b) => b.type));
+  const leg = (c, t, pointille) => `<div style="display:flex;align-items:center;gap:6px;"><span style="width:10px;height:10px;border-radius:2px;background:${c};display:inline-block;${pointille ? "border:1px dashed #378ADD;" : ""}"></span>${t}</div>`;
+  const legende = `<div style="display:flex;flex-direction:column;gap:4px;margin-top:8px;font-size:11px;color:var(--text-secondary);">
+    ${types.has("mesure") ? leg("#1B3A52", "Mesuré entre deux relevés rapprochés") : ""}
+    ${types.has("compteur") ? leg("#3AA31C", "Lu sur le compteur (code 813)") : ""}
+    ${types.has("moyenne") ? leg("#B5D4F4", "Période longue : moyenne seulement", true) : ""}
+  </div>`;
+  return `<svg viewBox="0 0 ${width} ${height}" style="width:100%;height:auto;">${bars}</svg>${legende}`;
 }
 
 // ---------------------------------------------------------------
@@ -1286,14 +1341,15 @@ async function modifierAchat(id, { montant, kwh, kwhEstime, modePaiement, date, 
 async function supprimerAchat(id) {
   await deleteDoc(doc(db, "users", currentUser.uid, "compteurs", compteurActifId, "achats", id));
 }
-async function ajouterReleve({ soldeKwh, date }) {
+async function ajouterReleve({ soldeKwh, date, consoHier }) {
   const doc_ = { soldeKwh, date: Timestamp.fromDate(new Date(date)), createdAt: Timestamp.now() };
+  if (consoHier != null) doc_.consoHier = consoHier;
 
   await addDoc(collection(db, "users", currentUser.uid, "compteurs", compteurActifId, "releves"), doc_);
 }
-async function modifierReleve(id, { soldeKwh, date }) {
+async function modifierReleve(id, { soldeKwh, date, consoHier }) {
   await updateDoc(doc(db, "users", currentUser.uid, "compteurs", compteurActifId, "releves", id), {
-    soldeKwh, date: Timestamp.fromDate(new Date(date)),
+    soldeKwh, date: Timestamp.fromDate(new Date(date)), consoHier: consoHier != null ? consoHier : null,
   });
 }
 async function supprimerReleve(id) {
@@ -1355,13 +1411,14 @@ function exporterAchatsCSV() {
 }
 
 function exporterRelevesCSV() {
-  const lignes = ["Date;Heure;Solde kWh restant"];
+  const lignes = ["Date;Heure;Solde kWh restant;Conso de la veille (813)"];
   releves.forEach((r) => {
     const d = toDate(r.date);
     lignes.push([
       d.toLocaleDateString("fr-FR"),
       d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
       String(r.soldeKwh).replace(".", ","),
+      r.consoHier != null ? String(r.consoHier).replace(".", ",") : "",
     ].join(";"));
   });
   telechargerFichier(`woyofal-releves-${nomCompteurPourFichier()}-${todayStr()}.csv`, "\uFEFF" + lignes.join("\r\n"), "text/csv;charset=utf-8;");
@@ -1622,7 +1679,7 @@ function renderDashboard() {
   const intervalles = intervallesConsommation(releves, achats);
   const taux = tauxMoyenJournalier(intervalles);
   const prevision = joursRestantsEtDate(releves, achats, taux);
-  const plage = plageRythme(intervalles);
+  const plage = plageRythme(intervalles, releves);
   const fourchette = fourchettePrevision(prevision, taux, plage);
   const aAnomalie = intervalles.some((i) => i.anomalie);
 
@@ -1719,7 +1776,7 @@ function renderDashboard() {
           ${prevision && !plage ? `<p style="font-size:11px;color:var(--text-muted);margin:-8px 0 12px;">La fourchette s'affichera après 5 relevés espacés d'un à deux jours.</p>` : ""}`}
           ${coutEstimeHtml}
           <div style="height:1px;background:var(--border);margin:0 0 14px;"></div>
-          ${statHead("chart", "Conso par période (kWh/j)")}
+          ${statHead("chart", "Conso par jour (kWh/j)")}
           ${graphiqueConsommationSVG(intervalles)}
           ${aAnomalie ? `<p style="font-size:12px;color:var(--danger-text);margin:8px 0 0;">Une période en rouge signale un rythme incoherent (negatif ou irrealiste) sur cette période - souvent un achat et un releve enregistres le même jour dans le mauvais ordre. Cet intervalle est exclu du rythme moyen.</p>` : ""}
         `
@@ -2158,6 +2215,11 @@ function renderReleves() {
           ${statHead("calendar", "Date et heure")}
           <input type="datetime-local" id="r-date" value="${releveEdite ? datetimeLocalStr(toDate(releveEdite.date)) : nowLocalDatetimeStr()}" />
         </div>
+        <div style="border:1.5px dashed var(--success-text);border-radius:12px;padding:10px;background:var(--success-bg);">
+          ${statHead("clock", "Conso d'hier (kWh) · facultatif", "var(--success-text)")}
+          <input type="text" inputmode="decimal" id="r-hier" placeholder="Ex. 5,8" value="${releveEdite && releveEdite.consoHier != null ? String(releveEdite.consoHier).replace(".", ",") : ""}" />
+          <p style="font-size:11.5px;color:var(--success-text);margin:5px 0 0;">Code 813 sur le compteur. Donne une vraie valeur pour hier, même si ton dernier relevé est ancien.</p>
+        </div>
       </div>
       <p id="r-error" style="font-size:13px;color:var(--danger-text);margin:0 0 10px;display:none;"></p>
       <div style="display:flex;gap:8px;">
@@ -2179,6 +2241,7 @@ function renderReleves() {
           <div class="row" style="align-items:center;">
             <p style="font-size:10.5px;color:var(--text-muted);margin:0;">${fmtDateHeure(r.date)}</p>
             <div style="display:flex;align-items:center;gap:12px;">
+              ${r.consoHier != null ? `<span style="font-size:11px;background:var(--success-bg);color:var(--success-text);border-radius:999px;padding:3px 8px;white-space:nowrap;">hier : ${String(r.consoHier).replace(".", ",")} kWh</span>` : ""}
               <span style="font-size:14px;font-weight:600;color:var(--text-primary);">${r.soldeKwh} kWh</span>
               <button data-edit-releve="${r.id}" class="icon-btn" aria-label="Modifier">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"></path><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
@@ -2199,6 +2262,9 @@ function renderReleves() {
     const date = document.getElementById("r-date").value;
     const errorEl = document.getElementById("r-error");
     if (isNaN(soldeKwh) || soldeKwh < 0) { errorEl.style.display = "block"; errorEl.textContent = "Entre un solde kWh valide."; return; }
+    const hierTxt = document.getElementById("r-hier").value.trim();
+    const consoHier = hierTxt === "" ? null : parseMontant(hierTxt);
+    if (consoHier !== null && (isNaN(consoHier) || consoHier < 0 || consoHier > 50)) { errorEl.style.display = "block"; errorEl.textContent = "Conso d'hier : saisis une valeur de 0 à 50 kWh, ou laisse vide."; return; }
     errorEl.style.display = "none";
     envoiReleveEnCours = true;
     const btnReleve = e.target.querySelector('button[type="submit"]');
@@ -2208,9 +2274,9 @@ function renderReleves() {
         const idAModifier = releveEnEditionId;
         releveEnEditionId = null;
         render();
-        await ecrireDoux(modifierReleve(idAModifier, { soldeKwh, date }));
+        await ecrireDoux(modifierReleve(idAModifier, { soldeKwh, date, consoHier }));
       } else {
-        await ecrireDoux(ajouterReleve({ soldeKwh, date }));
+        await ecrireDoux(ajouterReleve({ soldeKwh, date, consoHier }));
         toast("Relevé enregistré");
       }
     } finally {
