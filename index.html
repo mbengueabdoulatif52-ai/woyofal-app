@@ -3,22 +3,25 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="theme-color" content="#3AA31C" />
+<meta name="theme-color" content="#1E7A3C" />
 <title>Woyofal - Suivi conso</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" href="icon-192.png" type="image/png" />
 <style>
   :root {
-    --navy: #1B3A52;
-    --orange: #FAAC03;
-    --bg: #F7F6F2;
+    --primary: #1E7A3C;
+    --primary-dark: #17602F;
+    --accent: #F5C518;
+    --navy: #1E7A3C;
+    --orange: #F5C518;
+    --bg: #F6F7F2;
     --surface: #FFFFFF;
-    --border: #E3E0D8;
-    --text-primary: #22282D;
-    --text-secondary: #5B6570;
-    --text-muted: #8A9199;
-    --success-bg: #E1F0E6;
-    --success-text: #1E6B3C;
+    --border: #E6E8E0;
+    --text-primary: #17251B;
+    --text-secondary: #5F6B62;
+    --text-muted: #8A938C;
+    --success-bg: #E3F1E6;
+    --success-text: #1E5C30;
     --warning-bg: #FBEBD6;
     --warning-text: #8A550B;
     --danger-bg: #FBE4E1;
@@ -27,10 +30,22 @@
   * { box-sizing: border-box; }
   body { margin:0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text-primary); }
   button { font-family: inherit; cursor: pointer; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); padding: 10px 16px; font-size: 14px; }
-  button.primary { background: var(--navy); color: #fff; border: none; }
+  button.primary { background: var(--primary); color: #fff; border: none; font-weight: 600; }
+  button.primary:active { background: var(--primary-dark); }
+  button:disabled { opacity: .6; }
   button.accent { background: var(--orange); color: #fff; border: none; }
   input, select { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; font-weight: 400; font-size: 15px; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border); background: #fff; width: 100%; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+  .lbl { display:block; font-size: 12.5px; color: var(--text-secondary); margin: 0 0 5px; }
+  .grid2 { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px; }
+  .chip-compteur { display:inline-flex; align-items:center; gap:7px; background: var(--surface); border:1px solid var(--border); border-radius:999px; padding:5px 12px 5px 5px; font-size:14px; font-weight:600; color: var(--text-primary); }
+  .chip-compteur img { width:26px; height:26px; border-radius:8px; }
+  .seg { display:flex; background: var(--bg); border-radius:10px; padding:3px; }
+  .seg button { flex:1; border:none; background:none; border-radius:8px; padding:8px; font-size:13px; color: var(--text-muted); }
+  .seg button.on { background: var(--surface); color: var(--text-primary); font-weight:600; }
+  .mois-titre { font-size:12px; color: var(--text-secondary); padding: 10px 16px 6px; background: var(--bg); border-bottom:1px solid var(--border); }
+  .q-montant { border:1px solid var(--border); border-radius:999px; padding:7px 0; font-size:12.5px; background: var(--surface); white-space:nowrap; }
+  .q-montant.on { background: var(--primary); border-color: var(--primary); color:#fff; }
   .label { font-size: 12.5px; color: var(--text-secondary); margin: 0 0 6px; }
   .screen { display: none; }
   .screen.visible { display: block; }
@@ -44,8 +59,8 @@
   .top-header { position: fixed; top: 0; left: 0; right: 0; z-index: 10; display: none; justify-content: space-between; align-items: center; background: var(--bg); border-bottom: 1px solid var(--border); max-width: 640px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) 16px 14px; }
   .nav-btn { flex: 1; border: none; background: none; padding: 9px 0 8px; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--text-muted); font-size: 11px; }
   .nav-btn svg { width: 22px; height: 22px; stroke: var(--text-muted); }
-  .nav-btn.active { color: var(--orange); font-weight: 600; }
-  .nav-btn.active svg { stroke: var(--orange); }
+  .nav-btn.active { color: var(--primary); font-weight: 600; }
+  .nav-btn.active svg { stroke: var(--primary); }
 </style>
 </head>
 <body>
@@ -62,30 +77,16 @@
 
 <div id="main-screen" class="screen container">
   <div id="top-header" class="top-header">
-    <div style="display:flex;align-items:center;gap:9px;">
-      <img src="icon-192.png" width="26" height="26" style="border-radius:6px;display:block;flex-shrink:0;" alt="Woyofal" />
-      <div>
-        <span style="font-weight:600;font-size:16px;display:block;line-height:1.2;">Woyofal</span>
-        <span id="compteur-actif-label" style="font-size:11px;color:var(--text-secondary);cursor:pointer;"></span>
-      </div>
-    </div>
-    <div style="display:flex;gap:14px;align-items:center;">
-      <button id="compteurs-btn" class="icon-btn" aria-label="Mes compteurs" title="Mes compteurs">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><path d="M9 22V12h6v10"></path></svg>
-      </button>
-      <button id="settings-btn" class="icon-btn" aria-label="Parametres" title="Parametres">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-      </button>
-      <button id="logout-btn" class="icon-btn" aria-label="Deconnexion" title="Deconnexion">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><path d="M16 17l5-5-5-5"></path><path d="M21 12H9"></path></svg>
-      </button>
-    </div>
+    <button id="compteurs-btn" class="chip-compteur" aria-label="Changer de compteur">
+      <img src="icon-192.png" alt="" />
+      <span id="compteur-actif-label"></span>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>
+    </button>
+    <button id="settings-btn" class="icon-btn" aria-label="Réglages" title="Réglages">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    </button>
   </div>
-
-  <div style="display:flex;background:var(--bg);border-radius:10px;padding:3px;margin-top:10px;margin-bottom:16px;">
-    <button type="button" id="toggle-simple" style="flex:1;text-align:center;padding:8px;border:none;border-radius:8px;font-size:12.5px;background:none;color:var(--text-muted);">Simple</button>
-    <button type="button" id="toggle-avance" style="flex:1;text-align:center;padding:8px;border:none;border-radius:8px;font-size:12.5px;background:var(--surface);font-weight:600;color:var(--text-primary);">Avancé</button>
-  </div>
+  <div style="height:10px;"></div>
 
   <div id="alerte-solde"></div>
   <div id="rappel-releve"></div>
@@ -109,23 +110,29 @@
 <div id="settings-modal" style="display:none;position:fixed;inset:0;background:rgba(34,40,45,0.45);z-index:50;align-items:center;justify-content:center;padding:20px;">
   <div style="background:var(--surface);border-radius:12px;padding:20px;max-width:360px;width:100%;max-height:85vh;overflow-y:auto;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <p style="font-size:15px;font-weight:600;margin:0;">Parametres</p>
+      <p style="font-size:16px;font-weight:600;margin:0;">Réglages</p>
       <button id="settings-close" class="icon-btn" aria-label="Fermer">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"></path></svg>
       </button>
     </div>
 
-    <p class="label" style="text-transform:uppercase;letter-spacing:0.05em;font-size:11px;">Catégorie tarifaire</p>
+    <p class="lbl">Affichage</p>
+    <div class="seg" style="margin-bottom:18px;">
+      <button type="button" id="toggle-simple">Simple</button>
+      <button type="button" id="toggle-avance" class="on">Avancé</button>
+    </div>
+    <p class="lbl">Catégorie tarifaire du compteur</p>
     <select id="categorie-select" style="margin-bottom:10px;"></select>
     <div style="background:var(--warning-bg);border-radius:8px;padding:10px 12px;margin-bottom:16px;">
-      <p style="font-size:12px;color:var(--warning-text);margin:0;line-height:1.5;">Pas sûr de ta catégorie ? Compose <strong>809</strong> sur ton compteur (Verification usage).</p>
+      <p style="font-size:12px;color:var(--warning-text);margin:0;line-height:1.5;">Pas sûr de ta catégorie ? Compose <strong>809</strong> sur ton compteur (vérification de l'usage).</p>
     </div>
     <button id="categorie-save-btn" class="primary" style="width:100%;margin-bottom:22px;">Enregistrer</button>
 
     <div style="height:1px;background:var(--border);margin-bottom:16px;"></div>
 
-    <p class="label" style="text-transform:uppercase;letter-spacing:0.05em;font-size:11px;margin-bottom:10px;">Codes utiles du compteur</p>
+    <p class="lbl" style="margin-bottom:6px;">Codes utiles du compteur</p>
     <div id="codes-utiles-list"></div>
+    <button id="logout-btn" style="width:100%;margin-top:18px;color:var(--danger-text);">Se déconnecter</button>
   </div>
 </div>
 
@@ -140,7 +147,7 @@
   </button>
   <button class="nav-btn" data-tab="releves">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"></rect><path d="M9 4V2h6v2"></path><path d="M8 10h8M8 14h8M8 18h5"></path></svg>
-    Releves
+    Relevés
   </button>
 </nav>
 
@@ -248,19 +255,19 @@ function getTarifsActuels() {
 
 const CODES_UTILES = [
   { code: "800", label: "Consommation totale d'énergie" },
-  { code: "801", label: "Credit restant" },
-  { code: "804", label: "Numero du compteur" },
-  { code: "808", label: "Puissance instantanee" },
-  { code: "809", label: "Verification usage" },
-  { code: "810", label: "Valeur du decouvert" },
-  { code: "811", label: "Credit d'urgence (a activer une fois a zero)" },
-  { code: "812", label: "Desactivation de l'alarme sonore" },
-  { code: "813", label: "Consommation de la journee precedente" },
+  { code: "801", label: "Crédit restant" },
+  { code: "804", label: "Numéro du compteur" },
+  { code: "808", label: "Puissance instantanée" },
+  { code: "809", label: "Vérification de l'usage" },
+  { code: "810", label: "Valeur du découvert" },
+  { code: "811", label: "Crédit d'urgence (à activer une fois à zéro)" },
+  { code: "812", label: "Désactivation de l'alarme sonore" },
+  { code: "813", label: "Consommation de la journée précédente" },
   { code: "814", label: "Consommation d'énergie du mois en cours" },
   { code: "815", label: "Date de la dernière recharge" },
   { code: "816", label: "Heure de la dernière recharge" },
   { code: "817", label: "Montant de la dernière recharge" },
-  { code: "820", label: "Consommation du mois precedent" },
+  { code: "820", label: "Consommation du mois précédent" },
   { code: "830", label: "Code de la dernière recharge" },
 ];
 
@@ -667,6 +674,29 @@ async function ecrireDoux(promesse) {
   await Promise.race([promesse.catch(() => {}), new Promise((res) => setTimeout(res, 2500))]);
 }
 
+// Nombres a la francaise (virgule, 1 decimale par defaut)
+function fmtNb(n, dec = 1) {
+  return (Math.round((Number(n) || 0) * 10 ** dec) / 10 ** dec).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: dec });
+}
+// Regroupe une liste (deja triee du plus recent au plus ancien) par mois calendaire
+function groupesParMois(liste) {
+  const groupes = [];
+  for (const it of liste) {
+    const d = toDate(it.date);
+    const cle = d.getFullYear() * 12 + d.getMonth();
+    let g = groupes[groupes.length - 1];
+    if (!g || g.cle !== cle) {
+      const lib = d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+      g = { cle, libelle: lib.charAt(0).toUpperCase() + lib.slice(1), items: [] };
+      groupes.push(g);
+    }
+    g.items.push(it);
+  }
+  return groupes;
+}
+const ICONE_MODIFIER = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"></path><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>';
+const ICONE_SUPPRIMER = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"></path><path d="M10 11v6M14 11v6"></path><path d="M6 7l1 13h10l1-13"></path><path d="M9 7V4h6v3"></path></svg>';
+
 function toDate(d) {
   if (!d) return new Date(0);
   if (typeof d.toDate === "function") return d.toDate();
@@ -1022,11 +1052,11 @@ const topHeader = document.getElementById("top-header");
 const tabContent = document.getElementById("tab-content");
 
 document.getElementById("login-btn").addEventListener("click", () => signInWithPopup(auth, googleProvider));
+const settingsModal = document.getElementById("settings-modal");
 document.getElementById("logout-btn").addEventListener("click", () => {
-  if (confirm("Se deconnecter ?")) signOut(auth);
+  if (confirm("Se déconnecter ?")) { settingsModal.style.display = "none"; signOut(auth); }
 });
 
-const settingsModal = document.getElementById("settings-modal");
 const categorieSelect = document.getElementById("categorie-select");
 
 Object.keys(TARIFS_PAR_CATEGORIE).forEach((code) => {
@@ -1083,7 +1113,6 @@ async function basculerMode(nouveauMode) {
 }
 document.getElementById("toggle-simple").addEventListener("click", () => basculerMode("simple"));
 document.getElementById("toggle-avance").addEventListener("click", () => basculerMode("avance"));
-document.getElementById("compteur-actif-label").addEventListener("click", ouvrirCompteursModal);
 document.getElementById("compteurs-close").addEventListener("click", () => {
   compteursModalOuvert = false;
   compteursModal.style.display = "none";
@@ -1393,7 +1422,7 @@ const LABELS_MODE_PAIEMENT = {
   wave: "Wave",
   orange_money: "Orange Money",
   carte: "Carte",
-  especes: "Especes",
+  especes: "Espèces",
 };
 
 // ---------------------------------------------------------------
@@ -1564,7 +1593,7 @@ function formatMontantInput(input) {
 // 4. RENDU DES ONGLETS
 // ---------------------------------------------------------------
 function render() {
-  if (modeAffichage === "simple") return;
+  if (modeAffichage === "simple") { renderSimuler(); return; }
   renderAlerteSolde();
   renderRappelReleve();
   if (currentTab === "dashboard") renderDashboard();
@@ -1574,13 +1603,8 @@ function render() {
 
 function appliquerModeAffichage() {
   const estSimple = modeAffichage === "simple";
-  document.getElementById("toggle-simple").style.background = estSimple ? "var(--surface)" : "none";
-  document.getElementById("toggle-simple").style.color = estSimple ? "var(--text-primary)" : "var(--text-muted)";
-  document.getElementById("toggle-simple").style.fontWeight = estSimple ? "600" : "400";
-  document.getElementById("toggle-avance").style.background = estSimple ? "none" : "var(--surface)";
-  document.getElementById("toggle-avance").style.color = estSimple ? "var(--text-muted)" : "var(--text-primary)";
-  document.getElementById("toggle-avance").style.fontWeight = estSimple ? "400" : "600";
-
+  document.getElementById("toggle-simple").classList.toggle("on", estSimple);
+  document.getElementById("toggle-avance").classList.toggle("on", !estSimple);
   document.getElementById("simuler-content").style.display = estSimple ? "block" : "none";
   document.getElementById("alerte-solde").style.display = estSimple ? "none" : "block";
   document.getElementById("rappel-releve").style.display = estSimple ? "none" : "block";
@@ -1605,7 +1629,7 @@ function renderAlerteSolde() {
     el.innerHTML = `
       <div style="background:var(--danger-bg);border-radius:10px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;margin-bottom:20px;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--danger-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-        <p style="font-size:13px;color:var(--danger-text);margin:0;line-height:1.5;"><strong>Solde presque épuisé</strong> - environ ${jours} jour${jours > 1 ? "s" : ""} restant${jours > 1 ? "s" : ""} a ton rythme actuel, a sec vers le ${prevision.dateEstimee.toLocaleDateString("fr-FR")}.</p>
+        <p style="font-size:13px;color:var(--danger-text);margin:0;line-height:1.5;"><strong>Solde presque épuisé</strong> - environ ${jours} jour${jours > 1 ? "s" : ""} restant${jours > 1 ? "s" : ""} à ton rythme actuel, à sec vers le ${prevision.dateEstimee.toLocaleDateString("fr-FR")}.</p>
       </div>
     `;
   } else {
@@ -1618,11 +1642,11 @@ function renderRappelReleve() {
   if (!el) return;
   let message = null;
   if (releves.length === 0) {
-    message = "<strong>Aucun releve enregistre</strong> - ajoutes-en un pour activer les prévisions.";
+    message = "<strong>Aucun relevé enregistré</strong> : ajoute-en un pour activer les prévisions.";
   } else {
     const jours = Math.floor(joursEntre(releves[0].date, new Date()));
     if (jours >= SEUIL_JOURS_RELEVE) {
-      message = `<strong>Pas de releve depuis ${jours} jour${jours > 1 ? "s" : ""}</strong> - ajoutes-en un pour garder des prévisions fiables.`;
+      message = `<strong>Pas de relevé depuis ${jours} jour${jours > 1 ? "s" : ""}</strong> : ajoute-en un pour garder des prévisions fiables.`;
     }
   }
   if (message) {
@@ -1644,9 +1668,9 @@ function renderRappelReleve() {
 }
 
 const PALIER_STYLE = {
-  1: { bg: "var(--success-bg)", text: "var(--success-text)", label: "Tranche 1" },
-  2: { bg: "var(--warning-bg)", text: "var(--warning-text)", label: "Tranche 2" },
-  3: { bg: "var(--danger-bg)", text: "var(--danger-text)", label: "Tranche 3" },
+  1: { bg: "var(--success-bg)", text: "var(--success-text)", label: "Tranche 1", barre: "#1E7A3C" },
+  2: { bg: "var(--warning-bg)", text: "#9A6A00", label: "Tranche 2", barre: "#F5C518" },
+  3: { bg: "var(--danger-bg)", text: "var(--danger-text)", label: "Tranche 3", barre: "#D9822B" },
 };
 
 // Icones discretes (currentColor) + helpers pour une hierarchie coherente
@@ -1663,16 +1687,13 @@ const ICONS = {
 };
 
 function statHead(iconKey, label, color) {
-  color = color || "var(--text-muted)";
-  return `<div style="display:flex;align-items:flex-start;gap:5px;margin-bottom:7px;min-height:26px;color:${color};">
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;">${ICONS[iconKey]}</svg>
-    <span style="font-size:10px;letter-spacing:0.06em;text-transform:uppercase;font-weight:600;line-height:1.3;">${label}</span>
-  </div>`;
+  color = color || "var(--text-secondary)";
+  return `<p style="font-size:12.5px;color:${color};margin:0 0 6px;line-height:1.3;">${label}</p>`;
 }
 
 function statValue(value, unit, color) {
   color = color || "var(--text-primary)";
-  return `<p style="margin:0;font-variant-numeric:tabular-nums;"><span style="font-size:20px;font-weight:700;color:${color};">${value}</span>${unit ? ` <span style="font-size:12px;color:var(--text-muted);">${unit}</span>` : ""}</p>`;
+  return `<p style="margin:0;font-variant-numeric:tabular-nums;"><span style="font-size:24px;font-weight:600;letter-spacing:-.01em;color:${color};">${value}</span>${unit ? ` <span style="font-size:12px;color:var(--text-muted);">${unit}</span>` : ""}</p>`;
 }
 
 function detailAchatHtml(redevance, taxeCommunaleMontant, tvaMontant, kwh, seuilTva) {
@@ -1718,9 +1739,9 @@ function renderDashboard() {
       coutPourBloc = { montant: calcCout.montantTotal, kwh: besoinPrevu, jusquau: dateLimiteMois0().toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) };
       coutEstimeHtml = `
         <div style="background:var(--warning-bg);border-radius:10px;padding:12px 14px;margin-bottom:14px;">
-          ${statHead("wallet", "Cout estime", "var(--warning-text)")}
+          ${statHead("wallet", "Coût estimé", "var(--warning-text)")}
           <p style="margin:0 0 3px;"><span style="font-size:19px;font-weight:700;color:var(--warning-text);">~${calcCout.montantTotal.toLocaleString("fr-FR")} F</span></p>
-          <p style="font-size:11.5px;color:var(--warning-text);margin:0;">Pour tenir jusqu'au ${dateLimiteMois0().toLocaleDateString("fr-FR")} (${Math.round(besoinPrevu * 10) / 10} kWh), a ton rythme actuel</p>
+          <p style="font-size:11.5px;color:var(--warning-text);margin:0;">Pour tenir jusqu'au ${dateLimiteMois0().toLocaleDateString("fr-FR")} (${Math.round(besoinPrevu * 10) / 10} kWh), à ton rythme actuel</p>
         </div>
       `;
     } else {
@@ -1739,31 +1760,27 @@ function renderDashboard() {
   const style = PALIER_STYLE[palier];
 
   tabContent.innerHTML = `
-    <div class="grid" style="margin-bottom:20px;">
-      <div class="card" style="background:${style.bg};border-color:transparent;">
-        ${statHead("wallet", "kWh achetés ce mois", style.text)}
-        ${statValue(cumul.toFixed(1).replace(".", ","), "kWh", style.text)}
-        <p style="font-size:11px;margin:6px 0 0;color:${style.text};">${style.label}</p>
+    <div class="grid2" style="margin-bottom:14px;">
+      <div class="card" style="background:var(--primary);border-color:var(--primary);color:#fff;">
+        <p style="font-size:12.5px;margin:0 0 6px;opacity:.85;">Solde compteur</p>
+        <p style="margin:0;"><span style="font-size:26px;font-weight:600;letter-spacing:-.01em;">${prevision ? prevision.soldeEstime.toFixed(1).replace(".", ",") : dernierReleve ? String(dernierReleve.soldeKwh).replace(".", ",") : "–"}</span> <span style="font-size:13px;opacity:.85;">kWh</span></p>
+        <p style="font-size:11.5px;margin:4px 0 0;opacity:.8;">${prevision ? "estimé, achats inclus" : dernierReleve ? "dernier relevé" : "aucun relevé"}</p>
       </div>
       <div class="card">
-        ${statHead("gauge", "Solde compteur")}
-        ${prevision
-          ? `${statValue(prevision.soldeEstime.toFixed(1).replace(".", ","), "kWh")}<p style="font-size:11px;margin:6px 0 0;color:var(--text-muted);">Estimé (achats inclus)</p>`
-          : dernierReleve
-            ? `${statValue(String(dernierReleve.soldeKwh).replace(".", ","), "kWh")}<p style="font-size:11px;margin:6px 0 0;color:var(--text-muted);">Dernier releve</p>`
-            : statValue("-", "")
-        }
+        <p style="font-size:12.5px;margin:0 0 6px;color:var(--text-secondary);">Achats du mois</p>
+        <p style="margin:0;"><span style="font-size:26px;font-weight:600;letter-spacing:-.01em;">${cumul.toFixed(1).replace(".", ",")}</span> <span style="font-size:13px;color:var(--text-secondary);">kWh</span></p>
+        <p style="font-size:11.5px;margin:4px 0 0;color:${style.text};font-weight:600;">${style.label.toLowerCase()}</p>
       </div>
     </div>
 
     <div style="margin-bottom:20px;">
-      <div style="position:relative;height:16px;border-radius:8px;background:#E9E7E0;overflow:hidden;margin-bottom:8px;">
-        <div style="position:absolute;left:0;top:0;bottom:0;width:${markerPct}%;background:${palier === 1 ? "#1E6B3C" : palier === 2 ? "#C9820F" : "#B23A2A"};border-radius:8px;"></div>
+      <div style="position:relative;height:10px;border-radius:5px;background:#E6E8E0;overflow:hidden;margin-bottom:6px;">
+        <div style="position:absolute;left:0;top:0;bottom:0;width:${markerPct}%;background:${style.barre};border-radius:5px;"></div>
         <div style="position:absolute;left:${(t1max / jaugeMax) * 100}%;top:0;bottom:0;width:1px;background:var(--bg);"></div>
         <div style="position:absolute;left:${(t2max / jaugeMax) * 100}%;top:0;bottom:0;width:1px;background:var(--bg);"></div>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:13px;">
-        <span style="font-weight:600;color:${style.text};">${cumul.toFixed(1).replace(".", ",")} kWh</span>
+      <div style="display:flex;justify-content:space-between;font-size:12px;">
+        <span style="font-weight:600;color:var(--text-secondary);">${cumul.toFixed(1).replace(".", ",")} kWh</span>
         <span style="color:var(--text-muted);">${restant !== null ? Math.round(restant) + " kWh avant la tranche " + (palier + 1) : style.label}</span>
       </div>
     </div>
@@ -1771,7 +1788,7 @@ function renderDashboard() {
     <div class="card" style="margin-bottom:20px;">
       <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Prévisions</p>
       ${releves.length < 2
-        ? `<p style="font-size:13px;color:var(--text-secondary);margin:0;">Ajoute au moins 2 releves espacés dans le temps (onglet Releves) pour activer les prévisions.</p>`
+        ? `<p style="font-size:13px;color:var(--text-secondary);margin:0;">Ajoute au moins 2 relevés espacés dans le temps (onglet Relevés) pour activer les prévisions.</p>`
         : `
           ${fourchette ? blocPrevisionHtml(fourchette, prevision, taux, plage, coutPourBloc) : `
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;margin-bottom:16px;">
@@ -1793,7 +1810,7 @@ function renderDashboard() {
           <div style="height:1px;background:var(--border);margin:0 0 14px;"></div>
           ${statHead("chart", "Conso par jour (kWh/j)")}
           ${graphiqueConsommationSVG(intervalles)}
-          ${aAnomalie ? `<p style="font-size:12px;color:var(--danger-text);margin:8px 0 0;">Une période en rouge signale un rythme incoherent (negatif ou irrealiste) sur cette période - souvent un achat et un releve enregistres le même jour dans le mauvais ordre. Cet intervalle est exclu du rythme moyen.</p>` : ""}
+          ${aAnomalie ? `<p style="font-size:12px;color:var(--danger-text);margin:8px 0 0;">Une période en rouge signale un rythme incohérent (négatif ou irréaliste) sur cette période, souvent un achat et un relevé enregistrés le même jour dans le mauvais ordre. Cet intervalle est exclu du rythme moyen.</p>` : ""}
         `
       }
     </div>
@@ -1818,7 +1835,7 @@ function renderDashboard() {
         <p id="opt-rythme-note" style="font-size:11px;margin:6px 0 0;display:none;"></p>
       </div>
 
-      <p id="opt-label" style="font-size:12px;color:var(--text-muted);margin:0 0 4px;">Combien veux-tu depenser au total ?</p>
+      <p id="opt-label" style="font-size:12px;color:var(--text-muted);margin:0 0 4px;">Combien veux-tu dépenser au total ?</p>
       <p style="font-size:11.5px;color:var(--text-muted);margin:0 0 8px;">${estPremierAchatDuMois(achats) ? "Ce serait ton 1er achat du mois (redevance appliquee)." : "Redevance déjà payee ce mois-ci."}</p>
       <div style="display:flex;gap:8px;margin-bottom:14px;">
         <input type="text" inputmode="decimal" id="opt-input" placeholder="Montant en FCFA" style="flex:1;" />
@@ -1850,7 +1867,7 @@ function renderDashboard() {
     optModeKwhBtn.style.background = surBudget ? "none" : "var(--surface)";
     optModeKwhBtn.style.fontWeight = surBudget ? "400" : "600";
     optModeKwhBtn.style.color = surBudget ? "var(--text-muted)" : "var(--text-primary)";
-    optLabelEl.textContent = surBudget ? "Combien veux-tu depenser au total ?" : "De combien de kWh as-tu besoin au total ?";
+    optLabelEl.textContent = surBudget ? "Combien veux-tu dépenser au total ?" : "De combien de kWh as-tu besoin au total ?";
     optInputEl.placeholder = surBudget ? "Montant en FCFA" : "kWh souhaites";
     optInputEl.value = "";
     optResultEl.innerHTML = "";
@@ -2011,7 +2028,7 @@ function renderDashboard() {
     }
     const manqueDetecte = Math.max(rapide.manqueMois0 || 0, economique.manqueMois0 || 0);
     if (manqueDetecte > 0.5) {
-      html += `<div style="background:var(--danger-bg);border-radius:8px;padding:10px 12px;margin-top:8px;"><p style="font-size:12px;color:var(--danger-text);margin:0;line-height:1.5;"><strong>Ce montant ne couvre pas ton besoin reel du mois</strong> - il manquerait environ ${manqueDetecte} kWh par rapport a ce qu'il te faut pour tenir jusqu'au ${dateLimiteMois0().toLocaleDateString("fr-FR")}.</p></div>`;
+      html += `<div style="background:var(--danger-bg);border-radius:8px;padding:10px 12px;margin-top:8px;"><p style="font-size:12px;color:var(--danger-text);margin:0;line-height:1.5;"><strong>Ce montant ne couvre pas ton besoin réel du mois</strong> - il manquerait environ ${manqueDetecte} kWh par rapport a ce qu'il te faut pour tenir jusqu'au ${dateLimiteMois0().toLocaleDateString("fr-FR")}.</p></div>`;
     }
 
     optResultEl.innerHTML = html;
@@ -2023,31 +2040,33 @@ function renderAchats() {
 
   tabContent.innerHTML = `
     <form id="achat-form" class="card" style="margin-bottom:20px;">
-      <p style="font-size:14px;font-weight:600;margin:0 0 14px;">${achatEdite ? "Modifier l'achat" : "Ajouter un achat"}</p>
-      <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px;">
+      <p style="font-size:16px;font-weight:600;margin:0 0 14px;">${achatEdite ? "Modifier l'achat" : "Nouvel achat"}</p>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:12px;">
         <div>
-          ${statHead("wallet", "Montant (FCFA)")}
-          <input type="text" inputmode="decimal" id="a-montant" value="${achatEdite ? achatEdite.montant : ""}" />
+          <label class="lbl" for="a-montant">Montant (F)</label>
+          <input type="text" inputmode="decimal" id="a-montant" placeholder="5 000" value="${achatEdite ? achatEdite.montant : ""}" />
         </div>
+        <div class="grid2">
         <div>
-          ${statHead("calendar", "Date et heure")}
+          <label class="lbl" for="a-date">Date</label>
           <input type="datetime-local" id="a-date" value="${achatEdite ? datetimeLocalStr(toDate(achatEdite.date)) : nowLocalDatetimeStr()}" />
         </div>
         <div>
-          ${statHead("coin", "Mode de paiement")}
+          <label class="lbl" for="a-mode">Paiement</label>
           <select id="a-mode">
             <option value="wave" ${achatEdite && achatEdite.modePaiement === "wave" ? "selected" : ""}>Wave</option>
             <option value="orange_money" ${achatEdite && achatEdite.modePaiement === "orange_money" ? "selected" : ""}>Orange Money</option>
             <option value="carte" ${achatEdite && achatEdite.modePaiement === "carte" ? "selected" : ""}>Carte</option>
-            <option value="especes" ${achatEdite && achatEdite.modePaiement === "especes" ? "selected" : ""}>Especes (+1%)</option>
+            <option value="especes" ${achatEdite && achatEdite.modePaiement === "especes" ? "selected" : ""}>Espèces (+1 %)</option>
           </select>
         </div>
+        </div>
         <div>
-          ${statHead("bolt", "kWh recus (SMS Woyofal)")}
+          <div style="display:flex;justify-content:space-between;align-items:baseline;"><label class="lbl" for="a-kwh">kWh reçus (SMS)</label><span id="a-kwh-est" style="font-size:11.5px;color:var(--primary);"></span></div>
           <input type="text" inputmode="decimal" id="a-kwh" value="${achatEdite ? achatEdite.kwh : ""}" />
+          <p style="font-size:11.5px;color:var(--text-muted);margin:5px 0 0;">Pré-rempli avec l'estimation : corrige-le avec le chiffre reçu par SMS.</p>
         </div>
       </div>
-      <p style="font-size:12.5px;color:var(--text-muted);margin:0 0 10px;">Le champ kWh se pre-remplit en quittant le champ montant - corrige-le avec le chiffre reel reçu par SMS.</p>
       <div id="a-detail" style="margin-bottom:10px;"></div>
       <p id="a-ecart" style="font-size:12px;color:var(--warning-text);margin:0 0 10px;display:none;line-height:1.5;"></p>
       <p id="a-error" style="font-size:13px;color:var(--danger-text);margin:0 0 10px;display:none;"></p>
@@ -2057,41 +2076,44 @@ function renderAchats() {
       </div>
     </form>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-      <p style="font-size:14px;font-weight:600;margin:0;">Historique des achats</p>
+      <p style="font-size:16px;font-weight:600;margin:0;">Historique</p>
       <div style="display:flex;gap:8px;">
         <button type="button" id="export-achats-csv" style="padding:5px 10px;font-size:12px;">CSV</button>
         <button type="button" id="export-achats-pdf" style="padding:5px 10px;font-size:12px;">PDF</button>
       </div>
     </div>
     ${achats.length === 0
-      ? `<p style="color:var(--text-secondary);font-size:14px;">Aucun achat enregistre pour le moment.</p>`
-      : `<div class="card" style="padding:0;">${achats.map((a) => {
+      ? `<p style="color:var(--text-secondary);font-size:14px;">Aucun achat enregistré pour le moment.</p>`
+      : `<div class="card" style="padding:0;overflow:hidden;">${groupesParMois(achats).map((g) => `
+          <div class="mois-titre">${g.libelle} · ${Math.round(g.items.reduce((s, a) => s + (a.montant || 0), 0)).toLocaleString("fr-FR")} F · ${fmtNb(g.items.reduce((s, a) => s + (a.kwh || 0), 0))} kWh</div>
+          ${g.items.map((a) => {
           const aDetail = a.redevance !== undefined;
+          const d = toDate(a.date);
+          const prixKwh = a.kwh > 0 ? a.montant / a.kwh : null;
           return `
           <div class="row" style="flex-direction:column;align-items:stretch;">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <div>
-                <p style="font-size:10.5px;color:var(--text-muted);margin:0 0 2px;">${fmtDateHeure(a.date)}</p>
-                <p style="font-size:14px;font-weight:600;color:var(--text-primary);margin:0;">${a.montant.toLocaleString("fr-FR")} F</p>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+              <div style="min-width:0;">
+                <p style="font-size:15px;font-weight:600;color:var(--text-primary);margin:0;">${a.montant.toLocaleString("fr-FR")} F</p>
+                <p style="font-size:11.5px;color:var(--text-muted);margin:2px 0 0;">${d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} · ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })} · ${LABELS_MODE_PAIEMENT[a.modePaiement] || ""}</p>
               </div>
-              <div style="display:flex;align-items:center;gap:10px;">
-                <span style="font-size:13px;color:var(--text-secondary);">${a.kwh} kWh</span>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <div style="text-align:right;margin-right:4px;">
+                  <p style="font-size:15px;font-weight:600;margin:0;">${fmtNb(a.kwh)} kWh</p>
+                  ${prixKwh ? `<p style="font-size:11.5px;color:var(--text-muted);margin:2px 0 0;">${fmtNb(prixKwh)} F/kWh</p>` : ""}
+                </div>
                 ${aDetail ? `
-                  <button data-toggle-achat="${a.id}" class="icon-btn" aria-label="Detail">
+                  <button data-toggle-achat="${a.id}" class="icon-btn" aria-label="Détail">
                     <svg id="chevron-achat-${a.id}" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .15s;"><path d="M6 9l6 6 6-6"></path></svg>
                   </button>
                 ` : ""}
-                <button data-edit-achat="${a.id}" class="icon-btn" aria-label="Modifier">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"></path><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                </button>
-                <button data-del-achat="${a.id}" class="icon-btn" aria-label="Supprimer">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"></path><path d="M10 11v6M14 11v6"></path><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"></path><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"></path></svg>
-                </button>
+                <button data-edit-achat="${a.id}" class="icon-btn" aria-label="Modifier">${ICONE_MODIFIER}</button>
+                <button data-del-achat="${a.id}" class="icon-btn" aria-label="Supprimer">${ICONE_SUPPRIMER}</button>
               </div>
             </div>
             ${aDetail ? `<div id="detail-achat-${a.id}" style="display:none;margin-top:10px;">${detailAchatHtml(a.redevance, a.taxeCommunaleMontant, a.tvaMontant, a.kwh, getTarifsActuels().tranches[1].max)}</div>` : ""}
           </div>`;
-        }).join("")}</div>`
+        }).join("")}`).join("")}</div>`
     }
   `;
 
@@ -2109,6 +2131,7 @@ function renderAchats() {
       if (!res.erreur) {
         aKwhEl.value = res.kwh;
         estimationKwh = res.kwh;
+        document.getElementById("a-kwh-est").textContent = "estimé : " + String(res.kwh).replace(".", ",");
         aEcartEl.style.display = "none";
         detailEl.innerHTML = detailAchatHtml(res.redevance, res.taxeCommunaleMontant, res.tvaMontant, res.kwh, getTarifsActuels().tranches[1].max);
       } else {
@@ -2136,7 +2159,7 @@ function renderAchats() {
     const ecartRelatif = ecart / estimationKwh;
     if (ecartRelatif > 0.02 && ecart > 0.3) {
       aEcartEl.style.display = "block";
-      aEcartEl.textContent = `Ecart de ${ecart.toFixed(1)} kWh (${Math.round(ecartRelatif * 100)}%) avec l'estimation (${estimationKwh} kWh). Si ca se reproduit a chaque achat, vérifie ta catégorie tarifaire dans Parametres - ou la formule (redevance/taxe/TVA) doit peut-etre etre ajustee pour ta catégorie.`;
+      aEcartEl.textContent = `Écart de ${ecart.toFixed(1).replace(".", ",")} kWh (${Math.round(ecartRelatif * 100)}%) avec l'estimation (${estimationKwh} kWh). Si ça se reproduit à chaque achat, vérifie ta catégorie tarifaire dans Réglages - ou la formule (redevance/taxe/TVA) doit peut-etre etre ajustee pour ta catégorie.`;
     } else {
       aEcartEl.style.display = "none";
     }
@@ -2220,18 +2243,18 @@ function renderReleves() {
 
   tabContent.innerHTML = `
     <form id="releve-form" class="card" style="margin-bottom:20px;">
-      <p style="font-size:14px;font-weight:600;margin:0 0 14px;">${releveEdite ? "Modifier le releve" : "Ajouter un releve"}</p>
+      <p style="font-size:16px;font-weight:600;margin:0 0 14px;">${releveEdite ? "Modifier le relevé" : "Nouveau relevé"}</p>
       <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px;">
         <div>
-          ${statHead("gauge", "Solde kWh restant")}
+          <label class="lbl" for="r-solde">Solde restant (kWh) · code 801</label>
           <input type="text" inputmode="decimal" id="r-solde" value="${releveEdite ? releveEdite.soldeKwh : ""}" />
         </div>
         <div>
-          ${statHead("calendar", "Date et heure")}
+          <label class="lbl" for="r-date">Date</label>
           <input type="datetime-local" id="r-date" value="${releveEdite ? datetimeLocalStr(toDate(releveEdite.date)) : nowLocalDatetimeStr()}" />
         </div>
         <div style="border:1.5px dashed var(--success-text);border-radius:12px;padding:10px;background:var(--success-bg);">
-          ${statHead("clock", "Conso d'hier (kWh) · facultatif", "var(--success-text)")}
+          <label class="lbl" for="r-hier" style="color:var(--success-text);font-weight:600;">Conso d'hier (kWh) · facultatif</label>
           <input type="text" inputmode="decimal" id="r-hier" placeholder="Ex. 5,8" value="${releveEdite && releveEdite.consoHier != null ? String(releveEdite.consoHier).replace(".", ",") : ""}" />
           <p style="font-size:11.5px;color:var(--success-text);margin:5px 0 0;">Code 813 sur le compteur. Donne une vraie valeur pour hier, même si ton dernier relevé est ancien.</p>
         </div>
@@ -2244,28 +2267,29 @@ function renderReleves() {
     </form>
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-      <p style="font-size:14px;font-weight:600;margin:0;">Historique des releves</p>
+      <p style="font-size:16px;font-weight:600;margin:0;">Historique</p>
       <div style="display:flex;gap:8px;">
         <button type="button" id="export-releves-csv" style="padding:5px 10px;font-size:12px;">CSV</button>
         <button type="button" id="export-releves-pdf" style="padding:5px 10px;font-size:12px;">PDF</button>
       </div>
     </div>
     ${releves.length === 0
-      ? `<p style="color:var(--text-secondary);font-size:14px;">Aucun releve enregistre pour le moment.</p>`
-      : `<div class="card" style="padding:0;">${releves.map((r) => `
-          <div class="row" style="align-items:center;">
-            <p style="font-size:10.5px;color:var(--text-muted);margin:0;">${fmtDateHeure(r.date)}</p>
-            <div style="display:flex;align-items:center;gap:12px;">
-              ${r.consoHier != null ? `<span style="font-size:11px;background:var(--success-bg);color:var(--success-text);border-radius:999px;padding:3px 8px;white-space:nowrap;">hier : ${String(r.consoHier).replace(".", ",")} kWh</span>` : ""}
-              <span style="font-size:14px;font-weight:600;color:var(--text-primary);">${r.soldeKwh} kWh</span>
-              <button data-edit-releve="${r.id}" class="icon-btn" aria-label="Modifier">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"></path><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-              </button>
-              <button data-del-releve="${r.id}" class="icon-btn" aria-label="Supprimer">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"></path><path d="M10 11v6M14 11v6"></path><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"></path><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"></path></svg>
-              </button>
+      ? `<p style="color:var(--text-secondary);font-size:14px;">Aucun relevé enregistré pour le moment.</p>`
+      : `<div class="card" style="padding:0;overflow:hidden;">${groupesParMois(releves).map((g) => `
+          <div class="mois-titre">${g.libelle} · ${g.items.length} relevé${g.items.length > 1 ? "s" : ""}</div>
+          ${g.items.map((r) => {
+            const d = toDate(r.date);
+            return `
+          <div class="row" style="align-items:center;gap:8px;">
+            <p style="font-size:12.5px;color:var(--text-secondary);margin:0;">${d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} · ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</p>
+            <div style="display:flex;align-items:center;gap:8px;">
+              ${r.consoHier != null ? `<span style="font-size:11px;background:var(--success-bg);color:var(--success-text);border-radius:999px;padding:3px 8px;white-space:nowrap;">hier : ${fmtNb(r.consoHier)}</span>` : ""}
+              <span style="font-size:15px;font-weight:600;color:var(--text-primary);white-space:nowrap;">${fmtNb(r.soldeKwh)} kWh</span>
+              <button data-edit-releve="${r.id}" class="icon-btn" aria-label="Modifier">${ICONE_MODIFIER}</button>
+              <button data-del-releve="${r.id}" class="icon-btn" aria-label="Supprimer">${ICONE_SUPPRIMER}</button>
             </div>
-          </div>`).join("")}</div>`
+          </div>`;
+          }).join("")}`).join("")}</div>`
     }
   `;
 
@@ -2330,194 +2354,105 @@ function renderReleves() {
 // données de suivi. Reste sur la catégorie du compteur actif (par
 // defaut DPP) plutot que d'ajouter un choix de catégorie ici.
 // ---------------------------------------------------------------
+// ---------------------------------------------------------------
+// VERSION SIMPLE : « Combien de kWh pour… »
+// Le mois en cours (cumul, redevance deja payee) et la categorie du compteur
+// sont pris automatiquement ; le resultat est aussi donne en jours.
+// ---------------------------------------------------------------
+let simMontant = 10000;
+const MONTANTS_RAPIDES = [2000, 5000, 10000, 15000, 20000];
+
 function renderSimuler() {
   const el = document.getElementById("simuler-content");
   if (!el) return;
-  let tarifsActuels = getTarifsActuels();
-  const montantMaxSlider = 200000; // plafond fixe - toute la courbe/graduations en decoulent
-  let dernierCumul = null, dernierPremier = null; // pour ne redessiner la structure que si besoin
-
-  const debut = debutMois();
-  const totalMontantMois = achats.filter((a) => toDate(a.date) >= debut).reduce((s, a) => s + (a.montant || 0), 0);
-
-  const W = 320, H = 190, padL = 30, padB = 35, padT = 10, padR = 8;
-  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const tarifs = getTarifsActuels();
+  const cumul = cumulMoisEnCours(achats);
+  const premier = estPremierAchatDuMois(achats);
+  const taux = releves.length >= 2 ? tauxMoyenJournalier(intervallesConsommation(releves, achats)) : null;
+  const t1 = tarifs.tranches[0].max, t2 = tarifs.tranches[1].max;
 
   el.innerHTML = `
     <div class="card">
-      <p style="font-size:14px;font-weight:600;margin:0 0 4px;">Combien de kWh vais-je obtenir ?</p>
-      <p style="font-size:12px;color:var(--text-secondary);margin:0 0 4px;">Catégorie tarifaire</p>
-      <select id="sim-categorie" style="margin-bottom:14px;"></select>
-      <p style="font-size:12px;color:var(--text-secondary);margin:0 0 4px;">Montant déjà acheté ce mois-ci</p>
-      <input type="text" inputmode="decimal" id="sim-montant-prealable" value="${totalMontantMois || ""}" placeholder="0" style="margin-bottom:16px;" />
-      <div style="display:flex;gap:12px;margin-bottom:14px;">
-        <div style="flex:1;">
-          <p style="font-size:9px;letter-spacing:0.05em;text-transform:uppercase;color:var(--text-muted);margin:0 0 4px;font-weight:600;">Montant (F)</p>
-          <input type="text" inputmode="decimal" id="sim-montant" style="font-size:15px;font-weight:600;" />
-        </div>
-        <div style="flex:1;">
-          <p style="font-size:9px;letter-spacing:0.05em;text-transform:uppercase;color:var(--success-text);margin:0 0 4px;font-weight:600;">kWh obtenus</p>
-          <input type="text" inputmode="decimal" id="sim-kwh" style="font-size:15px;font-weight:600;color:var(--success-text);border-color:var(--success-text);" />
-        </div>
+      <p style="font-size:17px;font-weight:600;margin:0 0 12px;">Combien de kWh pour…</p>
+      <div style="display:flex;align-items:center;border:1.5px solid var(--primary);border-radius:12px;padding:0 14px;background:var(--surface);">
+        <input type="text" inputmode="numeric" id="sim-montant" aria-label="Montant en francs" style="border:none;outline:none;font-size:24px;font-weight:600;padding:10px 0;flex:1;min-width:0;background:none;" />
+        <span style="font-size:15px;color:var(--text-secondary);">F</span>
       </div>
-      <div style="position:relative;height:190px;margin-bottom:8px;">
-        <svg id="sim-courbe" viewBox="0 0 ${W} ${H}" style="width:100%;height:100%;touch-action:none;cursor:pointer;"></svg>
+      <div id="sim-rapides" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin:10px 0 12px;">
+        ${MONTANTS_RAPIDES.map((m) => `<button type="button" class="q-montant" data-m="${m}">${m.toLocaleString("fr-FR")}</button>`).join("")}
       </div>
-      <div style="display:flex;justify-content:center;gap:14px;margin-bottom:14px;">
-        <span style="font-size:9px;color:var(--success-text);"><span style="display:inline-block;width:8px;height:8px;background:var(--success-bg);border:1px solid var(--success-text);border-radius:2px;margin-right:3px;"></span>Tranche 1</span>
-        <span style="font-size:9px;color:var(--warning-text);"><span style="display:inline-block;width:8px;height:8px;background:var(--warning-bg);border:1px solid var(--warning-text);border-radius:2px;margin-right:3px;"></span>Tranche 2</span>
-        <span style="font-size:9px;color:var(--danger-text);"><span style="display:inline-block;width:8px;height:8px;background:var(--danger-bg);border:1px solid var(--danger-text);border-radius:2px;margin-right:3px;"></span>Tranche 3</span>
-      </div>
-      <input type="range" id="sim-slider" min="0" max="${montantMaxSlider}" step="100" value="10000" style="width:100%;accent-color:var(--orange);margin-bottom:14px;" />
-      <div id="sim-detail"></div>
+      <div id="sim-resultat"></div>
+      <p style="font-size:12.5px;color:var(--text-secondary);margin:14px 0 6px;">Ce mois-ci : ${cumul > 0 ? `déjà ${fmtNb(cumul)} kWh achetés` : "aucun achat pour l'instant"}</p>
+      <div id="sim-barre"></div>
+      <details style="margin-top:12px;border-top:1px solid var(--border);padding-top:9px;">
+        <summary style="font-size:13px;color:var(--primary);cursor:pointer;">Voir le détail du calcul</summary>
+        <div id="sim-detail" style="margin-top:8px;"></div>
+      </details>
     </div>
+    <p style="text-align:center;font-size:12.5px;color:var(--text-secondary);margin:14px 0 6px;">Besoin de plus ? <button type="button" id="sim-avance" style="border:none;background:none;padding:0;color:var(--primary);font-weight:600;font-size:12.5px;">Passer en mode avancé</button></p>
   `;
 
-  const categorieSelectSim = document.getElementById("sim-categorie");
-  Object.keys(TARIFS_PAR_CATEGORIE).forEach((code) => {
-    const opt = document.createElement("option");
-    opt.value = code;
-    opt.textContent = TARIFS_PAR_CATEGORIE[code].label;
-    if (code === categorieTarifaire) opt.selected = true;
-    categorieSelectSim.appendChild(opt);
-  });
-  categorieSelectSim.addEventListener("change", () => {
-    tarifsActuels = TARIFS_PAR_CATEGORIE[categorieSelectSim.value] || TARIFS_PAR_CATEGORIE.DPP;
-    dernierCumul = null; dernierPremier = null; // force le redessin complet (tarifs differents)
-    majAffichage(parseFloat(document.getElementById("sim-slider").value) || 10000, false);
-  });
-
-  function etatSimulation() {
-    const montantPrealable = parseMontant(document.getElementById("sim-montant-prealable").value) || 0;
-    if (montantPrealable <= 0) return { cumulSimule: 0, premierSimule: true };
-    const resPrealable = calculerKwh(montantPrealable, 0, true, tarifsActuels);
-    return { cumulSimule: resPrealable.erreur ? 0 : resPrealable.kwh, premierSimule: false };
-  }
-
-  function toX(m) { return padL + (m / montantMaxSlider) * plotW; }
-
-  // Dessine les parties qui ne changent que si le cumul de depart change :
-  // axes, zones colorees par tranche, courbe, graduations. Cree aussi le
-  // point et les pointilles UNE SEULE FOIS, avec une transition CSS, pour
-  // qu'ils glissent au lieu de sauter d'une position a l'autre.
-  function dessinerStructure(cumulSimule, premierSimule) {
-    const svg = document.getElementById("sim-courbe");
-    const points = [];
-    const pas = montantMaxSlider / 50;
-    let maxKwh = 0.001;
-    for (let m = 0; m <= montantMaxSlider; m += pas) {
-      const res = calculerKwh(m, cumulSimule, premierSimule, tarifsActuels);
-      const kwh = res.erreur ? 0 : res.kwh;
-      points.push({ m, kwh });
-      if (kwh > maxKwh) maxKwh = kwh;
+  const input = document.getElementById("sim-montant");
+  function maj() {
+    const montant = simMontant;
+    input.value = montant > 0 ? montant.toLocaleString("fr-FR") : "";
+    document.querySelectorAll("#sim-rapides .q-montant").forEach((b) => b.classList.toggle("on", Number(b.dataset.m) === montant));
+    const res = calculerKwh(montant, cumul, premier, tarifs);
+    const resEl = document.getElementById("sim-resultat");
+    if (!montant || res.erreur) {
+      resEl.innerHTML = `<div style="background:var(--bg);border-radius:14px;padding:14px;font-size:13px;color:var(--text-secondary);">${montant && res.erreur ? `Montant trop faible : la redevance de ${tarifs.redevanceMensuelle} F est prélevée sur le premier achat du mois.` : "Saisis un montant ou choisis-en un ci-dessus."}</div>`;
+      document.getElementById("sim-barre").innerHTML = "";
+      document.getElementById("sim-detail").innerHTML = "";
+      return;
     }
-    const toY = (kwh) => (H - padB) - (kwh / maxKwh) * plotH;
-    const chemin = points.map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.m).toFixed(1)},${toY(p.kwh).toFixed(1)}`).join(" ");
-
-    let montantSeuil1 = null, montantSeuil2 = null;
-    const borne1 = tarifsActuels.tranches[0].max;
-    const borne2 = tarifsActuels.tranches[1].max;
-    if (cumulSimule < borne1) montantSeuil1 = planifierParKwh(borne1 - cumulSimule, 1, cumulSimule, premierSimule, tarifsActuels).montantTotal;
-    if (cumulSimule < borne2) montantSeuil2 = planifierParKwh(borne2 - cumulSimule, 1, cumulSimule, premierSimule, tarifsActuels).montantTotal;
-    const xSeuil1 = montantSeuil1 !== null ? Math.min(toX(montantSeuil1), W - padR) : padL;
-    const xSeuil2 = montantSeuil2 !== null ? Math.min(toX(montantSeuil2), W - padR) : padL;
-
-    const zones = [];
-    if (montantSeuil1 !== null) zones.push(`<rect x="${padL}" y="${padT}" width="${(xSeuil1 - padL).toFixed(1)}" height="${plotH}" fill="var(--success-bg)"></rect>`);
-    if (montantSeuil2 !== null) zones.push(`<rect x="${xSeuil1.toFixed(1)}" y="${padT}" width="${(xSeuil2 - xSeuil1).toFixed(1)}" height="${plotH}" fill="var(--warning-bg)"></rect>`);
-    zones.push(`<rect x="${xSeuil2.toFixed(1)}" y="${padT}" width="${(W - padR - xSeuil2).toFixed(1)}" height="${plotH}" fill="var(--danger-bg)"></rect>`);
-
-    const graduationsX = [0, montantMaxSlider / 2, montantMaxSlider].map((m) => `<text x="${toX(m).toFixed(1)}" y="${H - padB + 13}" font-size="8" fill="var(--text-muted)" text-anchor="middle">${Math.round(m / 1000)}k</text>`).join("");
-    const graduationsY = [0, maxKwh / 2, maxKwh].map((k) => `<text x="${padL - 4}" y="${(toY(k) + 3).toFixed(1)}" font-size="8" fill="var(--text-muted)" text-anchor="end">${Math.round(k)}</text>`).join("");
-
-    svg.innerHTML = `
-      ${zones.join("")}
-      <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H - padB}" stroke="var(--border)" />
-      <line x1="${padL}" y1="${H - padB}" x2="${W - padR}" y2="${H - padB}" stroke="var(--border)" />
-      ${graduationsX}
-      ${graduationsY}
-      <path d="${chemin}" fill="none" stroke="var(--navy)" stroke-width="2.5" />
-      <line id="sim-ligne-v" x1="${padL}" y1="${H - padB}" x2="${padL}" y2="${H - padB}" stroke="var(--orange)" stroke-width="1" stroke-dasharray="3,3" style="transition:x1 .15s ease,x2 .15s ease,y2 .15s ease;" />
-      <line id="sim-ligne-h" x1="${padL}" y1="${H - padB}" x2="${padL}" y2="${H - padB}" stroke="var(--orange)" stroke-width="1" stroke-dasharray="3,3" style="transition:x2 .15s ease,y1 .15s ease,y2 .15s ease;" />
-      <circle id="sim-point" cx="${padL}" cy="${H - padB}" r="6" fill="var(--orange)" stroke="var(--surface)" stroke-width="2" style="transition:cx .15s ease,cy .15s ease;" />
-    `;
-    dernierCumul = cumulSimule;
-    dernierPremier = premierSimule;
-    return { maxKwh, toY };
+    const jours = taux ? res.kwh / taux : null;
+    resEl.innerHTML = `
+      <div style="background:var(--primary);color:#fff;border-radius:14px;padding:13px 15px;">
+        <p style="font-size:12.5px;margin:0;opacity:.85;">Tu obtiens</p>
+        <p style="margin:2px 0 0;"><span style="font-size:30px;font-weight:600;letter-spacing:-.01em;">${fmtNb(res.kwh)}</span> <span style="font-size:14px;">kWh</span></p>
+        <p style="font-size:13px;margin:2px 0 0;">${jours ? `soit environ <b>${jours < 1 ? "moins d'un jour" : Math.round(jours) + " jour" + (Math.round(jours) > 1 ? "s" : "")}</b> à ton rythme (${fmtNb(taux)} kWh/j)` : "Ajoute des relevés pour savoir combien de jours ça représente."}</p>
+      </div>`;
+    // Barre : deja achete (gris) + cet achat (couleur de la tranche ou il se termine)
+    const apres = cumul + res.kwh;
+    const max = Math.max(t2 + 20, apres * 1.05);
+    const pct = (v) => Math.min(100, (v / max) * 100);
+    const finTranche = apres <= t1 ? 1 : apres <= t2 ? 2 : 3;
+    const coul = PALIER_STYLE[finTranche].barre;
+    document.getElementById("sim-barre").innerHTML = `
+      <div style="position:relative;height:12px;border-radius:6px;background:#E6E8E0;overflow:hidden;">
+        <div style="position:absolute;left:0;width:${pct(cumul)}%;height:12px;background:#C9CFC3;"></div>
+        <div style="position:absolute;left:${pct(cumul)}%;width:${pct(apres) - pct(cumul)}%;height:12px;background:${coul};"></div>
+        <div style="position:absolute;left:${pct(t1)}%;top:0;width:2px;height:12px;background:#fff;"></div>
+        <div style="position:absolute;left:${pct(t2)}%;top:0;width:2px;height:12px;background:#fff;"></div>
+      </div>
+      <div style="position:relative;height:15px;font-size:10.5px;color:var(--text-muted);margin-top:3px;">
+        <span style="position:absolute;left:0;">0</span>
+        <span style="position:absolute;left:${pct(t1)}%;transform:translateX(-50%);">${t1}</span>
+        <span style="position:absolute;left:${pct(t2)}%;transform:translateX(${pct(t2) > 85 ? "-100%" : "-50%"});white-space:nowrap;">${t2} kWh</span>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--text-secondary);margin-top:5px;">
+        ${cumul > 0 ? `<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#C9CFC3;margin-right:4px;"></span>déjà acheté</span>` : ""}
+        <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${coul};margin-right:4px;"></span>cet achat (${palierActuel(cumul, tarifs) === finTranche ? "tranche " + finTranche : "jusqu'à la tranche " + finTranche})</span>
+      </div>`;
+    const energie = montant - res.redevance - res.taxeCommunaleMontant - res.tvaMontant;
+    const ligne = (l, v) => `<div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-secondary);padding:3px 0;"><span>${l}</span><span>${v}</span></div>`;
+    document.getElementById("sim-detail").innerHTML =
+      ligne("Redevance mensuelle", res.redevance > 0 ? `${res.redevance.toLocaleString("fr-FR")} F` : "déjà payée ce mois") +
+      ligne(`Taxe communale (${fmtNb(tarifs.taxeCommunale * 100)} %)`, `${res.taxeCommunaleMontant.toLocaleString("fr-FR")} F`) +
+      (res.tvaMontant > 0 ? ligne(`TVA (${Math.round(tarifs.tva * 100)} %, au-delà de ${t2} kWh)`, `${res.tvaMontant.toLocaleString("fr-FR")} F`) : "") +
+      ligne("Énergie", `${Math.round(energie).toLocaleString("fr-FR")} F`);
   }
 
-  let dernierMaxKwh = 0.001;
-  function deplacerPoint(montantActuel, cumulSimule, premierSimule) {
-    const res = calculerKwh(montantActuel, cumulSimule, premierSimule, tarifsActuels);
-    const kwhActuel = res.erreur ? 0 : res.kwh;
-    const toY = (kwh) => (H - padB) - (kwh / dernierMaxKwh) * plotH;
-    const px = toX(Math.min(montantActuel, montantMaxSlider));
-    const py = toY(kwhActuel);
-    document.getElementById("sim-point").setAttribute("cx", px.toFixed(1));
-    document.getElementById("sim-point").setAttribute("cy", py.toFixed(1));
-    const ligneV = document.getElementById("sim-ligne-v");
-    ligneV.setAttribute("x1", px.toFixed(1)); ligneV.setAttribute("x2", px.toFixed(1)); ligneV.setAttribute("y2", py.toFixed(1));
-    const ligneH = document.getElementById("sim-ligne-h");
-    ligneH.setAttribute("y1", py.toFixed(1)); ligneH.setAttribute("x2", px.toFixed(1)); ligneH.setAttribute("y2", py.toFixed(1));
-  }
-
-  function majDetail(montantActuel, cumulSimule, premierSimule) {
-    const res = calculerKwh(montantActuel, cumulSimule, premierSimule, tarifsActuels);
-    document.getElementById("sim-detail").innerHTML = res.erreur ? "" : detailAchatHtml(res.redevance, res.taxeCommunaleMontant, res.tvaMontant, res.kwh, tarifsActuels.tranches[1].max);
-  }
-
-  function majAffichage(valeur, depuisKwh) {
-    const { cumulSimule, premierSimule } = etatSimulation();
-    let montantFinal, kwhFinal;
-    if (depuisKwh) {
-      const res = planifierParKwh(Math.max(0, valeur), 1, cumulSimule, premierSimule, tarifsActuels);
-      montantFinal = Math.min(res.montantTotal, montantMaxSlider);
-      kwhFinal = Math.round(calculerKwh(montantFinal, cumulSimule, premierSimule, tarifsActuels).kwh * 100) / 100;
-    } else {
-      montantFinal = Math.min(Math.max(0, valeur), montantMaxSlider);
-      const res = calculerKwh(montantFinal, cumulSimule, premierSimule, tarifsActuels);
-      kwhFinal = res.erreur ? 0 : res.kwh;
-    }
-    document.getElementById("sim-montant").value = Math.round(montantFinal).toLocaleString("fr-FR");
-    document.getElementById("sim-kwh").value = kwhFinal;
-    document.getElementById("sim-slider").value = Math.round(montantFinal / 100) * 100;
-
-    if (cumulSimule !== dernierCumul || premierSimule !== dernierPremier) {
-      const { maxKwh } = dessinerStructure(cumulSimule, premierSimule);
-      dernierMaxKwh = maxKwh;
-    }
-    deplacerPoint(montantFinal, cumulSimule, premierSimule);
-    majDetail(montantFinal, cumulSimule, premierSimule);
-  }
-
-  document.getElementById("sim-montant-prealable").addEventListener("input", () => {
-    majAffichage(parseFloat(document.getElementById("sim-slider").value) || 10000, false);
+  input.addEventListener("input", () => {
+    const v = parseInt(input.value.replace(/\D/g, ""), 10);
+    simMontant = isNaN(v) ? 0 : Math.min(v, 1000000);
+    const pos = input.value.length;
+    maj();
+    input.setSelectionRange(input.value.length, input.value.length);
   });
-  document.getElementById("sim-slider").addEventListener("input", (e) => {
-    majAffichage(parseFloat(e.target.value), false);
-  });
-  document.getElementById("sim-montant").addEventListener("change", () => {
-    majAffichage(parseMontant(document.getElementById("sim-montant").value) || 0, false);
-  });
-  document.getElementById("sim-kwh").addEventListener("change", () => {
-    majAffichage(parseMontant(document.getElementById("sim-kwh").value) || 0, true);
-  });
-
-  // Glisser directement sur la courbe (souris ou doigt)
-  const svgEl = document.getElementById("sim-courbe");
-  let enGlissement = false;
-  function depuisPointeur(e) {
-    const rect = svgEl.getBoundingClientRect();
-    const xRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const xSvg = xRatio * W;
-    const montant = ((xSvg - padL) / plotW) * montantMaxSlider;
-    majAffichage(Math.round(Math.max(0, montant) / 100) * 100, false);
-  }
-  svgEl.addEventListener("pointerdown", (e) => { enGlissement = true; depuisPointeur(e); });
-  window.addEventListener("pointermove", (e) => { if (enGlissement) depuisPointeur(e); });
-  window.addEventListener("pointerup", () => { enGlissement = false; });
-
-  majAffichage(10000, false);
+  document.querySelectorAll("#sim-rapides .q-montant").forEach((b) => b.addEventListener("click", () => { simMontant = Number(b.dataset.m); maj(); }));
+  document.getElementById("sim-avance").addEventListener("click", () => basculerMode("avance"));
+  maj();
 }
 
 // PWA service worker
