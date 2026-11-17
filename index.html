@@ -1593,7 +1593,7 @@ function formatMontantInput(input) {
 // 4. RENDU DES ONGLETS
 // ---------------------------------------------------------------
 function render() {
-  if (modeAffichage === "simple") { renderSimuler(); return; }
+  if (modeAffichage === "simple") return;
   renderAlerteSolde();
   renderRappelReleve();
   if (currentTab === "dashboard") renderDashboard();
@@ -2360,15 +2360,19 @@ function renderReleves() {
 // sont pris automatiquement ; le resultat est aussi donne en jours.
 // ---------------------------------------------------------------
 let simMontant = 10000;
+let simDejaAchete = 0;     // en F, saisi a la main : la calculette est independante de l'historique
+let simCategorie = null;   // categorie choisie dans la calculette (par defaut celle du compteur)
 const MONTANTS_RAPIDES = [2000, 5000, 10000, 15000, 20000];
 
 function renderSimuler() {
   const el = document.getElementById("simuler-content");
   if (!el) return;
-  const tarifs = getTarifsActuels();
-  const cumul = cumulMoisEnCours(achats);
-  const premier = estPremierAchatDuMois(achats);
-  const taux = releves.length >= 2 ? tauxMoyenJournalier(intervallesConsommation(releves, achats)) : null;
+  if (!simCategorie || !TARIFS_PAR_CATEGORIE[simCategorie]) simCategorie = categorieTarifaire;
+  const tarifs = TARIFS_PAR_CATEGORIE[simCategorie] || getTarifsActuels();
+  // Ce qui a deja ete achete ce mois, converti en kWh (premier achat : redevance incluse)
+  const prealable = simDejaAchete > 0 ? calculerKwh(simDejaAchete, 0, true, tarifs) : null;
+  const cumul = prealable && !prealable.erreur ? prealable.kwh : 0;
+  const premier = !(simDejaAchete > 0);
   const t1 = tarifs.tranches[0].max, t2 = tarifs.tranches[1].max;
 
   el.innerHTML = `
@@ -2381,8 +2385,18 @@ function renderSimuler() {
       <div id="sim-rapides" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin:10px 0 12px;">
         ${MONTANTS_RAPIDES.map((m) => `<button type="button" class="q-montant" data-m="${m}">${m.toLocaleString("fr-FR")}</button>`).join("")}
       </div>
+      <div class="grid2" style="margin-bottom:12px;">
+        <div>
+          <label class="lbl" for="sim-deja">Déjà acheté ce mois-ci</label>
+          <input type="text" inputmode="numeric" id="sim-deja" placeholder="0 F" value="${simDejaAchete > 0 ? simDejaAchete.toLocaleString("fr-FR") : ""}" />
+        </div>
+        <div>
+          <label class="lbl" for="sim-cat">Catégorie</label>
+          <select id="sim-cat">${Object.keys(TARIFS_PAR_CATEGORIE).map((c) => `<option value="${c}" ${c === simCategorie ? "selected" : ""}>${c}</option>`).join("")}</select>
+        </div>
+      </div>
       <div id="sim-resultat"></div>
-      <p style="font-size:12.5px;color:var(--text-secondary);margin:14px 0 6px;">Ce mois-ci : ${cumul > 0 ? `déjà ${fmtNb(cumul)} kWh achetés` : "aucun achat pour l'instant"}</p>
+      <p style="font-size:12.5px;color:var(--text-secondary);margin:14px 0 6px;">${cumul > 0 ? `Déjà ${fmtNb(cumul)} kWh ce mois-ci (pour ${simDejaAchete.toLocaleString("fr-FR")} F)` : "Premier achat du mois : la redevance est incluse."}</p>
       <div id="sim-barre"></div>
       <details style="margin-top:12px;border-top:1px solid var(--border);padding-top:9px;">
         <summary style="font-size:13px;color:var(--primary);cursor:pointer;">Voir le détail du calcul</summary>
@@ -2405,12 +2419,11 @@ function renderSimuler() {
       document.getElementById("sim-detail").innerHTML = "";
       return;
     }
-    const jours = taux ? res.kwh / taux : null;
     resEl.innerHTML = `
       <div style="background:var(--primary);color:#fff;border-radius:14px;padding:13px 15px;">
         <p style="font-size:12.5px;margin:0;opacity:.85;">Tu obtiens</p>
         <p style="margin:2px 0 0;"><span style="font-size:30px;font-weight:600;letter-spacing:-.01em;">${fmtNb(res.kwh)}</span> <span style="font-size:14px;">kWh</span></p>
-        <p style="font-size:13px;margin:2px 0 0;">${jours ? `soit environ <b>${jours < 1 ? "moins d'un jour" : Math.round(jours) + " jour" + (Math.round(jours) > 1 ? "s" : "")}</b> à ton rythme (${fmtNb(taux)} kWh/j)` : "Ajoute des relevés pour savoir combien de jours ça représente."}</p>
+        <p style="font-size:12.5px;margin:2px 0 0;opacity:.9;">${fmtNb(montant / res.kwh)} F le kWh en moyenne</p>
       </div>`;
     // Barre : deja achete (gris) + cet achat (couleur de la tranche ou il se termine)
     const apres = cumul + res.kwh;
@@ -2452,6 +2465,13 @@ function renderSimuler() {
   });
   document.querySelectorAll("#sim-rapides .q-montant").forEach((b) => b.addEventListener("click", () => { simMontant = Number(b.dataset.m); maj(); }));
   document.getElementById("sim-avance").addEventListener("click", () => basculerMode("avance"));
+  const dejaEl = document.getElementById("sim-deja");
+  dejaEl.addEventListener("change", () => {
+    const v = parseInt(dejaEl.value.replace(/\D/g, ""), 10);
+    simDejaAchete = isNaN(v) ? 0 : Math.min(v, 1000000);
+    renderSimuler();
+  });
+  document.getElementById("sim-cat").addEventListener("change", (e) => { simCategorie = e.target.value; renderSimuler(); });
   maj();
 }
 
