@@ -632,6 +632,41 @@ function appliquerFacteurCorrection(resultat, facteur, mode) {
   };
 }
 
+// Echappement HTML des textes saisis (noms de compteurs...)
+function esc(t) {
+  return String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Contexte tarifaire d'un achat a SA date : cumul des achats du meme mois
+// calendaire faits AVANT lui (en excluant l'achat en cours de modification),
+// et s'il est le premier du mois (redevance). Avant : on prenait toujours le
+// mois en cours, ce qui faussait les achats modifies ou saisis a posteriori.
+function contexteAchat(dateValue, excludeId) {
+  const d = dateValue ? new Date(dateValue) : new Date();
+  if (isNaN(d)) return { cumul: cumulMoisEnCours(achats), premier: estPremierAchatDuMois(achats) };
+  const debut = new Date(d.getFullYear(), d.getMonth(), 1);
+  const avant = achats.filter((a) => a.id !== excludeId && toDate(a.date) >= debut && toDate(a.date) < d);
+  return { cumul: avant.reduce((s, a) => s + (a.kwh || 0), 0), premier: avant.length === 0 };
+}
+
+// Petit message temporaire en bas d'ecran
+function toast(msg, erreur) {
+  const t = document.createElement("div");
+  t.textContent = msg;
+  t.style.cssText = "position:fixed;left:50%;bottom:84px;transform:translateX(-50%);max-width:90vw;padding:10px 14px;border-radius:10px;font-size:13px;z-index:9999;color:#fff;background:" + (erreur ? "#b3261e" : "#1f6f2b") + ";box-shadow:0 4px 14px rgba(0,0,0,.2);";
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), erreur ? 6000 : 2500);
+}
+
+// Ecriture Firestore sans bloquer l'ecran hors-ligne : la persistance locale
+// affiche l'achat tout de suite, la promesse ne se termine qu'au retour du
+// reseau. On rend la main apres 2,5 s maximum ; une vraie erreur (refus,
+// quota...) est signalee par un message, meme si elle arrive plus tard.
+async function ecrireDoux(promesse) {
+  promesse.catch((e) => toast("Enregistrement refusé : " + (e.message || e), true));
+  await Promise.race([promesse.catch(() => {}), new Promise((res) => setTimeout(res, 2500))]);
+}
+
 function toDate(d) {
   if (!d) return new Date(0);
   if (typeof d.toDate === "function") return d.toDate();
@@ -693,9 +728,11 @@ function tauxMoyenJournalier(intervalles) {
   // Ponderation par fraicheur en plus de la ponderation par duree deja en
   // place : un intervalle recent pese plus qu'un intervalle ancien, pour que
   // le rythme suive une vraie tendance au lieu d'etre dilue par le debut de
-  // l'historique. Demi-vie de 10 jours : un intervalle vieux de 10 jours
-  // pese moitie moins qu'un intervalle d'aujourd'hui, 20 jours = un quart, etc.
-  const DEMI_VIE_JOURS = 10;
+  // l'historique. Demi-vie de 5 jours : un intervalle vieux de 5 jours
+  // pese moitie moins qu'un intervalle d'aujourd'hui, 10 jours = un quart, etc.
+  // (choisie apres l'etude de sept.-nov. 2026 : 1,36 kWh d'erreur moyenne,
+  // contre 1,43 pour 10 j et 1,37 pour 3 j - ecarts dans le bruit).
+  const DEMI_VIE_JOURS = 5;
   const decay = Math.pow(0.5, 1 / DEMI_VIE_JOURS);
   const maintenant = new Date();
   let totalConsoPondere = 0, totalJoursPondere = 0;
@@ -729,23 +766,6 @@ function soldeEstimeAInstant(releves, achats, taux, instant) {
     .reduce((s, a) => s + (a.kwh || 0), 0);
   const soldeEstime = dernier.soldeKwh + achatsDepuis - taux * joursDepuis;
   return { soldeEstime: Math.max(0, soldeEstime) };
-}
-
-// Variante du rythme pondere par recence/duree avec une demi-vie choisie et
-// un instant de reference explicite (au lieu de new Date() en interne) -
-// pour comparer plusieurs demi-vies entre elles sur les memes donnees.
-function tauxPondereADemiVie(intervalles, demiVieJours, instant) {
-  const valides = intervalles.filter((i) => !i.anomalie);
-  if (valides.length === 0) return null;
-  const decay = Math.pow(0.5, 1 / demiVieJours);
-  let totalConsoPondere = 0, totalJoursPondere = 0;
-  for (const iv of valides) {
-    const joursDepuisFin = Math.max(0, joursEntre(iv.fin, instant));
-    const poidsRecence = Math.pow(decay, joursDepuisFin);
-    totalConsoPondere += iv.conso * poidsRecence;
-    totalJoursPondere += iv.jours * poidsRecence;
-  }
-  return totalJoursPondere > 0 ? totalConsoPondere / totalJoursPondere : null;
 }
 
 // Regroupe les intervalles bruts (releve a releve) en moyennes par jour
@@ -820,7 +840,6 @@ let releveEnEditionId = null;
 let compteurs = [];
 let compteurActifId = null;
 let modeAffichage = "avance";
-let methodeEtude = "10j"; // etude temporaire : "10j" (actuelle) ou "3j" (a l'etude)
 let unsubAchats = null;
 let unsubReleves = null;
 let unsubCompteurs = null;
@@ -920,7 +939,7 @@ function renderCompteursListe() {
     if (compteurEnRenommageId === c.id) {
       return `
         <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
-          <input type="text" id="renommer-input" value="${c.nom}" style="margin-bottom:8px;" />
+          <input type="text" id="renommer-input" value="${esc(c.nom)}" maxlength="40" style="margin-bottom:8px;" />
           <div style="display:flex;gap:8px;">
             <button type="button" class="primary" data-renommer-save="${c.id}" style="flex:1;">Enregistrer</button>
             <button type="button" data-renommer-annuler="1">Annuler</button>
@@ -938,7 +957,7 @@ function renderCompteursListe() {
             : `<div style="width:14px;height:14px;border-radius:50%;border:1.5px solid var(--text-muted);"></div>`
           }
           <div>
-            <p style="font-size:14px;font-weight:600;color:var(--text-primary);margin:0;">${c.nom}</p>
+            <p style="font-size:14px;font-weight:600;color:var(--text-primary);margin:0;">${esc(c.nom)}</p>
             <p style="font-size:11px;color:var(--text-secondary);margin:2px 0 0;">${label}${estActif ? " - actif" : ""}</p>
           </div>
         </div>
@@ -1183,27 +1202,7 @@ async function supprimerAchat(id) {
   await deleteDoc(doc(db, "users", currentUser.uid, "compteurs", compteurActifId, "achats", id));
 }
 async function ajouterReleve({ soldeKwh, date }) {
-  const nouvelleDate = new Date(date);
-  const doc_ = { soldeKwh, date: Timestamp.fromDate(nouvelleDate), createdAt: Timestamp.now() };
-
-  // Etude en cours (temporaire) : avant d'ajouter ce releve, on enregistre ce
-  // que chaque variante du rythme (demi-vie 10j actuelle vs 3j a l'etude)
-  // aurait predit comme solde a cet instant, avec les donnees disponibles
-  // avant lui - pour comparer les deux methodes sur plusieurs semaines
-  // avant de choisir laquelle garder definitivement.
-  if (releves.length >= 2) {
-    const intervallesAvant = intervallesConsommation(releves, achats);
-    const taux10j = tauxPondereADemiVie(intervallesAvant, 10, nouvelleDate);
-    const taux3j = tauxPondereADemiVie(intervallesAvant, 3, nouvelleDate);
-    if (taux10j && taux3j) {
-      const pred10j = soldeEstimeAInstant(releves, achats, taux10j, nouvelleDate).soldeEstime;
-      const pred3j = soldeEstimeAInstant(releves, achats, taux3j, nouvelleDate).soldeEstime;
-      // Signe : positif = la methode avait sous-estime la consommation
-      // (predit plus de solde restant qu'il n'y en avait vraiment).
-      doc_.ecartDemiVie10j = Math.round((soldeKwh - pred10j) * 100) / 100;
-      doc_.ecartDemiVie3j = Math.round((soldeKwh - pred3j) * 100) / 100;
-    }
-  }
+  const doc_ = { soldeKwh, date: Timestamp.fromDate(new Date(date)), createdAt: Timestamp.now() };
 
   await addDoc(collection(db, "users", currentUser.uid, "compteurs", compteurActifId, "releves"), doc_);
 }
@@ -1271,15 +1270,13 @@ function exporterAchatsCSV() {
 }
 
 function exporterRelevesCSV() {
-  const lignes = ["Date;Heure;Solde kWh restant;Ecart methode 10j;Ecart methode 3j"];
+  const lignes = ["Date;Heure;Solde kWh restant"];
   releves.forEach((r) => {
     const d = toDate(r.date);
     lignes.push([
       d.toLocaleDateString("fr-FR"),
       d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
       String(r.soldeKwh).replace(".", ","),
-      r.ecartDemiVie10j !== undefined ? String(r.ecartDemiVie10j).replace(".", ",") : "",
-      r.ecartDemiVie3j !== undefined ? String(r.ecartDemiVie3j).replace(".", ",") : "",
     ].join(";"));
   });
   telechargerFichier(`woyofal-releves-${nomCompteurPourFichier()}-${todayStr()}.csv`, "\uFEFF" + lignes.join("\r\n"), "text/csv;charset=utf-8;");
@@ -1538,34 +1535,9 @@ function renderDashboard() {
   const dernierReleve = releves[0];
 
   const intervalles = intervallesConsommation(releves, achats);
-  const taux = methodeEtude === "3j" ? tauxPondereADemiVie(intervalles, 3, new Date()) : tauxMoyenJournalier(intervalles);
+  const taux = tauxMoyenJournalier(intervalles);
   const prevision = joursRestantsEtDate(releves, achats, taux);
   const aAnomalie = intervalles.some((i) => i.anomalie);
-
-  // Etude en cours (temporaire) : ecart moyen accumule de chaque methode sur
-  // les releves qui ont deja une comparaison enregistree (voir ajouterReleve).
-  const relevesAvecEcart = releves.filter((r) => r.ecartDemiVie10j !== undefined);
-  const ecartMoyen10j = relevesAvecEcart.length > 0
-    ? relevesAvecEcart.reduce((s, r) => s + Math.abs(r.ecartDemiVie10j), 0) / relevesAvecEcart.length : null;
-  const ecartMoyen3j = relevesAvecEcart.length > 0
-    ? relevesAvecEcart.reduce((s, r) => s + Math.abs(r.ecartDemiVie3j), 0) / relevesAvecEcart.length : null;
-  const meilleureMethode = ecartMoyen10j !== null && ecartMoyen3j !== null
-    ? (ecartMoyen3j < ecartMoyen10j ? "3j" : (ecartMoyen10j < ecartMoyen3j ? "10j" : null)) : null;
-  const toggleEtudeHtml = `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <div style="display:flex;align-items:center;gap:5px;">
-          ${statHead("clock", "Etude : methode du rythme", "var(--warning-text)")}
-        </div>
-        ${meilleureMethode ? `<span style="font-size:9.5px;color:var(--success-text);font-weight:600;">${meilleureMethode} gagne pour l'instant</span>` : ""}
-      </div>
-      <div style="display:flex;background:var(--bg);border-radius:8px;padding:3px;">
-        <button type="button" id="methode-10j-btn" style="flex:1;text-align:center;padding:6px;border:none;border-radius:6px;font-size:11.5px;background:${methodeEtude === "10j" ? "var(--surface)" : "none"};font-weight:${methodeEtude === "10j" ? "600" : "400"};color:${methodeEtude === "10j" ? "var(--text-primary)" : "var(--text-muted)"};">10 jours (actuelle)</button>
-        <button type="button" id="methode-3j-btn" style="flex:1;text-align:center;padding:6px;border:none;border-radius:6px;font-size:11.5px;background:${methodeEtude === "3j" ? "var(--surface)" : "none"};font-weight:${methodeEtude === "3j" ? "600" : "400"};color:${methodeEtude === "3j" ? "var(--text-primary)" : "var(--text-muted)"};">3 jours (a l'etude)</button>
-      </div>
-      ${ecartMoyen10j !== null ? `<p style="font-size:9.5px;color:var(--text-muted);margin:6px 0 0;text-align:center;">Ecart moyen jusqu'ici : 10j = ${ecartMoyen10j.toFixed(2)} kWh · 3j = ${ecartMoyen3j.toFixed(2)} kWh</p>` : ""}
-    </div>
-  `;
 
   const besoinPrevu = calculerBesoinMois0(taux);
   let coutEstimeHtml = "";
@@ -1595,7 +1567,6 @@ function renderDashboard() {
   const style = PALIER_STYLE[palier];
 
   tabContent.innerHTML = `
-    ${toggleEtudeHtml}
     <div class="grid" style="margin-bottom:20px;">
       <div class="card" style="background:${style.bg};border-color:transparent;">
         ${statHead("wallet", "kWh achetés ce mois", style.text)}
@@ -1626,7 +1597,7 @@ function renderDashboard() {
     </div>
 
     <div class="card" style="margin-bottom:20px;">
-      <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Prévisions <span style="font-size:10px;font-weight:400;color:var(--text-muted);">(methode ${methodeEtude})</span></p>
+      <p style="font-size:14px;font-weight:600;margin:0 0 12px;">Prévisions</p>
       ${releves.length < 2
         ? `<p style="font-size:13px;color:var(--text-secondary);margin:0;">Ajoute au moins 2 releves espacés dans le temps (onglet Releves) pour activer les prévisions.</p>`
         : `
@@ -1683,8 +1654,6 @@ function renderDashboard() {
     </div>
   `;
 
-  document.getElementById("methode-10j-btn").addEventListener("click", () => { methodeEtude = "10j"; render(); });
-  document.getElementById("methode-3j-btn").addEventListener("click", () => { methodeEtude = "3j"; render(); });
 
   // --- Optimiseur d'achat ---
   let optMode = "budget";
@@ -1876,8 +1845,6 @@ function renderDashboard() {
 }
 
 function renderAchats() {
-  const cumul = cumulMoisEnCours(achats);
-  const premierAchat = estPremierAchatDuMois(achats);
   const achatEdite = achatEnEditionId ? achats.find((a) => a.id === achatEnEditionId) : null;
 
   tabContent.innerHTML = `
@@ -1963,7 +1930,8 @@ function renderAchats() {
     const detailEl = document.getElementById("a-detail");
     const val = parseMontant(montantEl.value);
     if (val > 0) {
-      const res = calculerKwh(val, cumul, premierAchat);
+      const ctx = contexteAchat(document.getElementById("a-date").value, achatEnEditionId);
+      const res = calculerKwh(val, ctx.cumul, ctx.premier);
       if (!res.erreur) {
         aKwhEl.value = res.kwh;
         estimationKwh = res.kwh;
@@ -1978,6 +1946,10 @@ function renderAchats() {
       estimationKwh = null;
     }
     formatMontantInput(montantEl);
+  });
+
+  document.getElementById("a-date").addEventListener("change", () => {
+    if (parseMontant(document.getElementById("a-montant").value) > 0) document.getElementById("a-montant").dispatchEvent(new Event("blur"));
   });
 
   aKwhEl.addEventListener("input", () => {
@@ -1996,8 +1968,10 @@ function renderAchats() {
     }
   });
 
+  let envoiAchatEnCours = false;
   document.getElementById("achat-form").addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (envoiAchatEnCours) return;
     const montant = parseMontant(document.getElementById("a-montant").value);
     const kwh = parseMontant(document.getElementById("a-kwh").value);
     const date = document.getElementById("a-date").value;
@@ -2006,18 +1980,28 @@ function renderAchats() {
     if (!montant || montant <= 0) { errorEl.style.display = "block"; errorEl.textContent = "Entre un montant valide."; return; }
     if (!kwh || kwh <= 0) { errorEl.style.display = "block"; errorEl.textContent = "Entre le nombre de kWh recus."; return; }
     errorEl.style.display = "none";
-    const calc = calculerKwh(montant, cumul, premierAchat);
+    const ctxAchat = contexteAchat(date, achatEnEditionId);
+    const calc = calculerKwh(montant, ctxAchat.cumul, ctxAchat.premier);
     const breakdown = calc.erreur
       ? { redevance: 0, taxeCommunaleMontant: 0, tvaMontant: 0 }
       : { redevance: calc.redevance, taxeCommunaleMontant: calc.taxeCommunaleMontant, tvaMontant: calc.tvaMontant };
     const kwhEstime = calc.erreur ? null : calc.kwh;
-    if (achatEnEditionId) {
-      const idAModifier = achatEnEditionId;
-      achatEnEditionId = null;
-      render();
-      await modifierAchat(idAModifier, { montant, kwh, kwhEstime, modePaiement, date, ...breakdown });
-    } else {
-      await ajouterAchat({ montant, kwh, kwhEstime, modePaiement, date, ...breakdown });
+    envoiAchatEnCours = true;
+    const btnAchat = e.target.querySelector('button[type="submit"]');
+    if (btnAchat) btnAchat.disabled = true;
+    try {
+      if (achatEnEditionId) {
+        const idAModifier = achatEnEditionId;
+        achatEnEditionId = null;
+        render();
+        await ecrireDoux(modifierAchat(idAModifier, { montant, kwh, kwhEstime, modePaiement, date, ...breakdown }));
+      } else {
+        await ecrireDoux(ajouterAchat({ montant, kwh, kwhEstime, modePaiement, date, ...breakdown }));
+        toast("Achat enregistré");
+      }
+    } finally {
+      envoiAchatEnCours = false;
+      if (btnAchat) btnAchat.disabled = false;
     }
   });
 
@@ -2105,20 +2089,31 @@ function renderReleves() {
     }
   `;
 
+  let envoiReleveEnCours = false;
   document.getElementById("releve-form").addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (envoiReleveEnCours) return;
     const soldeKwh = parseMontant(document.getElementById("r-solde").value);
     const date = document.getElementById("r-date").value;
     const errorEl = document.getElementById("r-error");
     if (isNaN(soldeKwh) || soldeKwh < 0) { errorEl.style.display = "block"; errorEl.textContent = "Entre un solde kWh valide."; return; }
     errorEl.style.display = "none";
-    if (releveEnEditionId) {
-      const idAModifier = releveEnEditionId;
-      releveEnEditionId = null;
-      render();
-      await modifierReleve(idAModifier, { soldeKwh, date });
-    } else {
-      await ajouterReleve({ soldeKwh, date });
+    envoiReleveEnCours = true;
+    const btnReleve = e.target.querySelector('button[type="submit"]');
+    if (btnReleve) btnReleve.disabled = true;
+    try {
+      if (releveEnEditionId) {
+        const idAModifier = releveEnEditionId;
+        releveEnEditionId = null;
+        render();
+        await ecrireDoux(modifierReleve(idAModifier, { soldeKwh, date }));
+      } else {
+        await ecrireDoux(ajouterReleve({ soldeKwh, date }));
+        toast("Relevé enregistré");
+      }
+    } finally {
+      envoiReleveEnCours = false;
+      if (btnReleve) btnReleve.disabled = false;
     }
   });
 

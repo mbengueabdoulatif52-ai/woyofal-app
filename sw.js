@@ -1,4 +1,4 @@
-const CACHE_NAME = "woyofal-v4";
+const CACHE_NAME = "woyofal-v5";
 const CORE_ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png"];
 
 self.addEventListener("install", (event) => {
@@ -28,8 +28,11 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        // On ne garde en cache que les reponses valides (pas les pages d'erreur)
+        if (response.ok || response.type === "opaque") {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
         return response;
       })
       .catch(() => caches.match(event.request))
